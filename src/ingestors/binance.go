@@ -18,6 +18,16 @@ type BinanceData struct {
 	LastFetched time.Time
 }
 
+type Kline struct {
+	OpenTime  time.Time
+	Open      float64
+	High      float64
+	Low       float64
+	Close     float64
+	Volume    float64
+	CloseTime time.Time
+}
+
 func BinancePoller() ([]BinanceData, error) {
 	symbols, err := getSymbols()
 	if err != nil {
@@ -76,42 +86,36 @@ func startPolling(data []BinanceData) {
 	for _, d := range data {
 		go func(d BinanceData) {
 			for {
-				_, _, closePrices, err := getPrices(d.Symbol, d.LastFetched)
+				klines, err := getPrices(d.Symbol, d.LastFetched)
 				if err != nil {
 					return
 				}
 
-				fmt.Println("close:", closePrices)
-
-				// for _, high := range highPrices {
-				// 	fmt.Println("Sending high price:", high)
-				// 	d.HighPrices <- high
-				// }
-
-				// for _, low := range lowPrices {
-				// 	fmt.Println("Sending low price:", low)
-				// 	d.LowPrices <- low
-				// }
-
-				for _, close := range closePrices {
-					fmt.Println("Sending close price:", close)
-					d.ClosePrices <- close
+				for _, kline := range klines {
+					d.ClosePrices <- kline.Close
 				}
 
 				d.LastFetched = time.Now()
+				sleep := 1 * time.Minute
 
-				time.Sleep(1 * time.Minute)
+				if len(klines) > 0 {
+					sleep = time.Until(klines[len(klines)-1].CloseTime.Truncate(time.Minute).Add(time.Minute).Add(5 * time.Second))
+				}
+
+				fmt.Printf("Sleeping for %s\n", sleep)
+
+				time.Sleep(sleep)
 			}
 		}(d)
 	}
 }
 
-func getPrices(symbol string, from time.Time) ([]float64, []float64, []float64, error) {
-	var highPrices, lowPrices, closePrices []float64
+func getPrices(symbol string, from time.Time) ([]Kline, error) {
+	var result []Kline
 	baseUrl := "https://fapi.binance.com/fapi/v1/klines"
 	u, err := url.Parse(baseUrl)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
 	q := u.Query()
@@ -127,46 +131,67 @@ func getPrices(symbol string, from time.Time) ([]float64, []float64, []float64, 
 
 	resp, err := http.Get(u.String())
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
 	var raw [][]interface{}
 	err = json.Unmarshal(body, &raw)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
 	for _, data := range raw {
 		high := data[2].(string)
 		low := data[3].(string)
+		open := data[1].(string)
 		close := data[4].(string)
+		volume := data[5].(string)
+
+		openTime := time.Unix(0, int64(data[0].(float64))*int64(time.Millisecond))
+		closeTime := time.Unix(0, int64(data[6].(float64))*int64(time.Millisecond))
 
 		high64, err := strconv.ParseFloat(high, 64)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 
 		low64, err := strconv.ParseFloat(low, 64)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
+		}
+
+		open64, err := strconv.ParseFloat(open, 64)
+		if err != nil {
+			return nil, err
 		}
 
 		close64, err := strconv.ParseFloat(close, 64)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 
-		highPrices = append(highPrices, high64)
-		lowPrices = append(lowPrices, low64)
-		closePrices = append(closePrices, close64)
+		volume64, err := strconv.ParseFloat(volume, 64)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, Kline{
+			OpenTime:  openTime,
+			High:      high64,
+			Low:       low64,
+			Open:      open64,
+			Close:     close64,
+			Volume:    volume64,
+			CloseTime: closeTime,
+		})
 	}
 
-	return highPrices, lowPrices, closePrices, nil
+	return result, nil
 }
