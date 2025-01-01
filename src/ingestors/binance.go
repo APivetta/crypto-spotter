@@ -12,9 +12,7 @@ import (
 
 type BinanceData struct {
 	Symbol      string
-	HighPrices  chan float64
-	LowPrices   chan float64
-	ClosePrices chan float64
+	Klines      chan Kline
 	LastFetched time.Time
 }
 
@@ -38,10 +36,8 @@ func BinancePoller() ([]BinanceData, error) {
 
 	for _, symbol := range symbols {
 		data = append(data, BinanceData{
-			Symbol:      symbol,
-			HighPrices:  make(chan float64),
-			LowPrices:   make(chan float64),
-			ClosePrices: make(chan float64),
+			Symbol: symbol,
+			Klines: make(chan Kline),
 		})
 	}
 
@@ -92,7 +88,7 @@ func startPolling(data []BinanceData) {
 				}
 
 				for _, kline := range klines {
-					d.ClosePrices <- kline.Close
+					d.Klines <- kline
 				}
 
 				d.LastFetched = time.Now()
