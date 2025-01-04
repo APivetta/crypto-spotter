@@ -14,6 +14,7 @@ import (
 
 type Scalping struct {
 	LastPrice <-chan float64
+	Weights   StrategyWeights
 }
 
 type Indicators struct {
@@ -26,6 +27,32 @@ type Indicators struct {
 	rsi14      <-chan float64
 	macdLine   <-chan float64
 	macdSignal <-chan float64
+}
+
+type StrategyWeights struct {
+	SuperTrendWeight  float64
+	BollingerWeight   float64
+	Ema5Weight        float64
+	Ema20Weight       float64
+	RsiWeight         float64
+	RsiOverbought     float64
+	RsiOversold       float64
+	MacdWeight        float64
+	MacdThreshold     float64
+	StrengthThreshold float64
+}
+
+type StrategyParams struct {
+	LatestPrice float64
+	SuperTrend  float64
+	UpperBand   float64
+	MiddleBand  float64
+	LowerBand   float64
+	Ema5        float64
+	Ema20       float64
+	Rsi14       float64
+	MacdLine    float64
+	MacdSignal  float64
 }
 
 func (*Scalping) Name() string {
@@ -68,6 +95,61 @@ func (*Scalping) getIndicators(snapshots <-chan *asset.Snapshot) Indicators {
 	}
 }
 
+func (i *Scalping) decide(params StrategyParams) strategy.Action {
+	// Initialize signal strength
+	signalStrength := 0.0
+
+	// EMA Crossover Logic
+	if params.Ema5 > params.Ema20 {
+		signalStrength += i.Weights.Ema5Weight // Bullish signal
+	} else if params.Ema5 < params.Ema20 {
+		signalStrength -= i.Weights.Ema20Weight // Bearish signal
+	}
+
+	// RSI Logic
+	if params.Rsi14 > i.Weights.RsiOverbought {
+		signalStrength -= i.Weights.RsiWeight // Bearish signal (overbought)
+	} else if params.Rsi14 < i.Weights.RsiOversold {
+		signalStrength += i.Weights.RsiWeight // Bullish signal (oversold)
+	}
+
+	// MACD Logic
+	macdDifference := params.MacdLine - params.MacdSignal
+	if macdDifference > i.Weights.MacdThreshold {
+		signalStrength += i.Weights.MacdWeight // Bullish signal
+	} else if macdDifference < -i.Weights.MacdThreshold {
+		signalStrength -= i.Weights.MacdWeight // Bearish signal
+	}
+
+	// SuperTrend Logic
+	if params.LatestPrice > params.SuperTrend {
+		signalStrength += i.Weights.SuperTrendWeight // Bullish signal
+	} else {
+		signalStrength -= i.Weights.SuperTrendWeight // Bearish signal
+	}
+
+	// Bollinger Band Logic
+	if params.LatestPrice < params.LowerBand {
+		signalStrength += i.Weights.BollingerWeight // Bullish signal (price near lower band)
+	} else if params.LatestPrice > params.UpperBand {
+		signalStrength -= i.Weights.BollingerWeight // Bearish signal (price near upper band)
+	} else if params.LatestPrice > params.MiddleBand {
+		signalStrength += i.Weights.BollingerWeight / 2 // Slightly bullish
+	} else if params.LatestPrice < params.MiddleBand {
+		signalStrength -= i.Weights.BollingerWeight / 2 // Slightly bearish
+	}
+
+	// Decision Logic
+	log.Printf("Signal Strength: %.2f", signalStrength)
+	if signalStrength > i.Weights.StrengthThreshold {
+		return strategy.Buy
+	} else if signalStrength < -i.Weights.StrengthThreshold {
+		return strategy.Sell
+	} else {
+		return strategy.Hold
+	}
+}
+
 func (i *Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Action {
 	var lp, st, ub, mb, lb, e5, e20, r14, ml, ms float64
 
@@ -79,7 +161,7 @@ func (i *Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Act
 		go func() {
 			for {
 				lp = <-i.LastPrice
-				log.Printf("Last Price: %.2f", lp)
+				// log.Printf("Last Price: %.2f", lp)
 			}
 		}()
 
@@ -125,19 +207,33 @@ func (i *Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Act
 
 	stabilization := 0
 	for range ss[1] {
-		if stabilization < 299 {
+		if stabilization < 250 {
 			stabilization++
 		} else {
 			time.Sleep(500 * time.Millisecond)
-			log.Printf("SuperTrend: %.2f", st)
-			log.Printf("UpperBand: %.2f", ub)
-			log.Printf("MiddleBand: %.2f", mb)
-			log.Printf("LowerBand: %.2f", lb)
-			log.Printf("EMA5: %.2f", e5)
-			log.Printf("EMA20: %.2f", e20)
-			log.Printf("RSI14: %.2f", r14)
-			log.Printf("MACDLine: %.2f", ml)
-			log.Printf("MACDSignal: %.2f", ms)
+			// log.Printf("SuperTrend: %.2f", st)
+			// log.Printf("UpperBand: %.2f", ub)
+			// log.Printf("MiddleBand: %.2f", mb)
+			// log.Printf("LowerBand: %.2f", lb)
+			// log.Printf("EMA5: %.2f", e5)
+			// log.Printf("EMA20: %.2f", e20)
+			// log.Printf("RSI14: %.2f", r14)
+			// log.Printf("MACDLine: %.2f", ml)
+			// log.Printf("MACDSignal: %.2f", ms)
+
+			action := i.decide(StrategyParams{
+				LatestPrice: lp,
+				SuperTrend:  st,
+				UpperBand:   ub,
+				MiddleBand:  mb,
+				LowerBand:   lb,
+				Ema5:        e5,
+				Ema20:       e20,
+				Rsi14:       r14,
+				MacdLine:    ml,
+				MacdSignal:  ms,
+			})
+			log.Printf("Action: %s", action.Annotation())
 		}
 	}
 

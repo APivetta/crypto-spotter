@@ -19,6 +19,18 @@ func main() {
 
 	scalp := strategies.Scalping{
 		LastPrice: btc.LastPrice,
+		Weights: strategies.StrategyWeights{
+			Ema5Weight:        0.5,
+			Ema20Weight:       0.5,
+			RsiWeight:         1.2,
+			MacdWeight:        1.3,
+			SuperTrendWeight:  1.5,
+			BollingerWeight:   0.8,
+			RsiOverbought:     70.0,
+			RsiOversold:       30.0,
+			MacdThreshold:     0.8,
+			StrengthThreshold: 2,
+		},
 	}
 	scalp.Compute(helper.Buffered(btc.Klines, 50))
 }
