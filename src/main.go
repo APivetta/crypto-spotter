@@ -18,7 +18,6 @@ func main() {
 	btc := bd[0]
 
 	scalp := strategies.Scalping{
-		LastPrice: btc.LastPrice,
 		Weights: strategies.StrategyWeights{
 			Ema5Weight:        0.5,
 			Ema20Weight:       0.5,
@@ -31,6 +30,36 @@ func main() {
 			MacdThreshold:     0.8,
 			StrengthThreshold: 2,
 		},
+		Stabilization: 100,
 	}
-	scalp.Compute(helper.Buffered(btc.Klines, 50))
+
+	ac := scalp.Compute(helper.Buffered(btc.Klines, 50))
+
+	for a := range ac {
+		log.Printf("Action: %v", a.Annotation())
+	}
+
+	// klines := ingestors.GetHistory("BTCUSDT", time.Now().Add(-1*time.Hour))
+
+	// repo := asset.NewInMemoryRepository()
+
+	// err := repo.Append("btc", klines)
+	// if err != nil {
+	// 	log.Fatalf("Error appending BTC data: %v", err)
+	// }
+
+	// r := reports.NewConsoleReport()
+
+	// bt := backtest.NewBacktest(repo, r)
+
+	// bt.Strategies = []strategy.Strategy{
+	// 	// strategy.NewBuyAndHoldStrategy(),
+	// 	// momentum.NewAwesomeOscillatorStrategy(),
+	// 	scalp,
+	// }
+
+	// bt.Run()
+	// if err != nil {
+	// 	log.Fatalf("Error running backtest: %v", err)
+	// }
 }

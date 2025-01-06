@@ -2,6 +2,7 @@ package strategies
 
 import (
 	"log"
+	"sync"
 	"time"
 
 	"github.com/cinar/indicator/v2/asset"
@@ -13,8 +14,9 @@ import (
 )
 
 type Scalping struct {
-	LastPrice <-chan float64
-	Weights   StrategyWeights
+	strategy.Strategy
+	Weights       StrategyWeights
+	Stabilization int
 }
 
 type Indicators struct {
@@ -55,11 +57,11 @@ type StrategyParams struct {
 	MacdSignal  float64
 }
 
-func (*Scalping) Name() string {
+func (Scalping) Name() string {
 	return "Scalping"
 }
 
-func (*Scalping) getIndicators(snapshots <-chan *asset.Snapshot) Indicators {
+func (Scalping) getIndicators(snapshots <-chan *asset.Snapshot) Indicators {
 	// init channels
 	ss := helper.Duplicate(snapshots, 3)
 	close := helper.Duplicate(asset.SnapshotsAsClosings(ss[0]), 6)
@@ -67,9 +69,9 @@ func (*Scalping) getIndicators(snapshots <-chan *asset.Snapshot) Indicators {
 	high := helper.Duplicate(asset.SnapshotsAsHighs(ss[2]), 1)
 
 	// init indicators
-	bollingerBands := volatility.NewBollingerBands[float64]()
 	emaFast := trend.NewEmaWithPeriod[float64](5)
 	emaSlow := trend.NewEmaWithPeriod[float64](20)
+	bollingerBands := volatility.NewBollingerBands[float64]()
 	rsi := momentum.NewRsi[float64]()
 	macd := trend.NewMacd[float64]()
 	superTrend := volatility.NewSuperTrend[float64]()
@@ -95,152 +97,176 @@ func (*Scalping) getIndicators(snapshots <-chan *asset.Snapshot) Indicators {
 	}
 }
 
-func (i *Scalping) decide(params StrategyParams) strategy.Action {
+func (s Scalping) decide(params StrategyParams) strategy.Action {
 	// Initialize signal strength
 	signalStrength := 0.0
 
 	// EMA Crossover Logic
 	if params.Ema5 > params.Ema20 {
-		signalStrength += i.Weights.Ema5Weight // Bullish signal
+		signalStrength += s.Weights.Ema5Weight // Bullish signal
 	} else if params.Ema5 < params.Ema20 {
-		signalStrength -= i.Weights.Ema20Weight // Bearish signal
+		signalStrength -= s.Weights.Ema20Weight // Bearish signal
 	}
 
 	// RSI Logic
-	if params.Rsi14 > i.Weights.RsiOverbought {
-		signalStrength -= i.Weights.RsiWeight // Bearish signal (overbought)
-	} else if params.Rsi14 < i.Weights.RsiOversold {
-		signalStrength += i.Weights.RsiWeight // Bullish signal (oversold)
+	if params.Rsi14 > s.Weights.RsiOverbought {
+		signalStrength -= s.Weights.RsiWeight // Bearish signal (overbought)
+	} else if params.Rsi14 < s.Weights.RsiOversold {
+		signalStrength += s.Weights.RsiWeight // Bullish signal (oversold)
 	}
 
 	// MACD Logic
 	macdDifference := params.MacdLine - params.MacdSignal
-	if macdDifference > i.Weights.MacdThreshold {
-		signalStrength += i.Weights.MacdWeight // Bullish signal
-	} else if macdDifference < -i.Weights.MacdThreshold {
-		signalStrength -= i.Weights.MacdWeight // Bearish signal
+	if macdDifference > s.Weights.MacdThreshold {
+		signalStrength += s.Weights.MacdWeight // Bullish signal
+	} else if macdDifference < -s.Weights.MacdThreshold {
+		signalStrength -= s.Weights.MacdWeight // Bearish signal
 	}
 
 	// SuperTrend Logic
 	if params.LatestPrice > params.SuperTrend {
-		signalStrength += i.Weights.SuperTrendWeight // Bullish signal
+		signalStrength += s.Weights.SuperTrendWeight // Bullish signal
 	} else {
-		signalStrength -= i.Weights.SuperTrendWeight // Bearish signal
+		signalStrength -= s.Weights.SuperTrendWeight // Bearish signal
 	}
 
 	// Bollinger Band Logic
 	if params.LatestPrice < params.LowerBand {
-		signalStrength += i.Weights.BollingerWeight // Bullish signal (price near lower band)
+		signalStrength += s.Weights.BollingerWeight // Bullish signal (price near lower band)
 	} else if params.LatestPrice > params.UpperBand {
-		signalStrength -= i.Weights.BollingerWeight // Bearish signal (price near upper band)
+		signalStrength -= s.Weights.BollingerWeight // Bearish signal (price near upper band)
 	} else if params.LatestPrice > params.MiddleBand {
-		signalStrength += i.Weights.BollingerWeight / 2 // Slightly bullish
+		signalStrength += s.Weights.BollingerWeight / 2 // Slightly bullish
 	} else if params.LatestPrice < params.MiddleBand {
-		signalStrength -= i.Weights.BollingerWeight / 2 // Slightly bearish
+		signalStrength -= s.Weights.BollingerWeight / 2 // Slightly bearish
 	}
 
 	// Decision Logic
-	log.Printf("Signal Strength: %.2f", signalStrength)
-	if signalStrength > i.Weights.StrengthThreshold {
+	// log.Printf("Signal Strength: %.2f", signalStrength)
+	if signalStrength > s.Weights.StrengthThreshold {
 		return strategy.Buy
-	} else if signalStrength < -i.Weights.StrengthThreshold {
+	} else if signalStrength < -s.Weights.StrengthThreshold {
 		return strategy.Sell
 	} else {
 		return strategy.Hold
 	}
 }
 
-func (i *Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Action {
-	var lp, st, ub, mb, lb, e5, e20, r14, ml, ms float64
-
-	ss := helper.Duplicate(snapshots, 2)
-
+func (s Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Action {
+	var st, ub, mb, lb, e5, e20, r14, ml, ms float64
+	stable := false
 	ac := make(chan strategy.Action, 50)
+	ss := make(chan *asset.Snapshot)
+	ind := s.getIndicators(ss)
+
+	var wg sync.WaitGroup
 	go func() {
-		ind := i.getIndicators(ss[0])
-		go func() {
-			for {
-				lp = <-i.LastPrice
-				// log.Printf("Last Price: %.2f", lp)
+		for {
+			st = <-ind.superTrend
+			if stable {
+				wg.Done()
 			}
-		}()
-
-		go func() {
-			for {
-				st = <-ind.superTrend
-			}
-		}()
-
-		go func() {
-			for {
-				ub = <-ind.upperBand
-				mb = <-ind.middleBand
-				lb = <-ind.lowerBand
-			}
-		}()
-
-		go func() {
-			for {
-				e5 = <-ind.ema5
-			}
-		}()
-
-		go func() {
-			for {
-				e20 = <-ind.ema20
-			}
-		}()
-
-		go func() {
-			for {
-				r14 = <-ind.rsi14
-			}
-		}()
-
-		go func() {
-			for {
-				ml = <-ind.macdLine
-				ms = <-ind.macdSignal
-			}
-		}()
+		}
 	}()
 
-	stabilization := 0
-	for range ss[1] {
-		if stabilization < 250 {
-			stabilization++
-		} else {
-			time.Sleep(500 * time.Millisecond)
-			// log.Printf("SuperTrend: %.2f", st)
-			// log.Printf("UpperBand: %.2f", ub)
-			// log.Printf("MiddleBand: %.2f", mb)
-			// log.Printf("LowerBand: %.2f", lb)
-			// log.Printf("EMA5: %.2f", e5)
-			// log.Printf("EMA20: %.2f", e20)
-			// log.Printf("RSI14: %.2f", r14)
-			// log.Printf("MACDLine: %.2f", ml)
-			// log.Printf("MACDSignal: %.2f", ms)
-
-			action := i.decide(StrategyParams{
-				LatestPrice: lp,
-				SuperTrend:  st,
-				UpperBand:   ub,
-				MiddleBand:  mb,
-				LowerBand:   lb,
-				Ema5:        e5,
-				Ema20:       e20,
-				Rsi14:       r14,
-				MacdLine:    ml,
-				MacdSignal:  ms,
-			})
-			log.Printf("Action: %s", action.Annotation())
+	go func() {
+		for {
+			ub = <-ind.upperBand
+			mb = <-ind.middleBand
+			lb = <-ind.lowerBand
+			if stable {
+				wg.Done()
+			}
 		}
-	}
+	}()
+
+	go func() {
+		for {
+			e5 = <-ind.ema5
+			if stable {
+				wg.Done()
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			e20 = <-ind.ema20
+			if stable {
+				wg.Done()
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			r14 = <-ind.rsi14
+			if stable {
+				wg.Done()
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			ml = <-ind.macdLine
+			ms = <-ind.macdSignal
+			if stable {
+				wg.Done()
+			}
+		}
+	}()
+
+	go func() {
+		i := 0
+		for asset := range snapshots {
+			log.Printf("Asset: %v, line %d", asset, i)
+			ss <- asset
+			wg.Wait()
+
+			// one time stabilization to let all indicators catch up before syncing
+			if !stable && i >= s.Stabilization {
+				time.Sleep(1 * time.Second)
+				stable = true
+			}
+
+			if i >= s.Stabilization {
+				log.Printf("SuperTrend: %.2f", st)
+				log.Printf("UpperBand: %.2f", ub)
+				log.Printf("MiddleBand: %.2f", mb)
+				log.Printf("LowerBand: %.2f", lb)
+				log.Printf("EMA5: %.2f", e5)
+				log.Printf("EMA20: %.2f", e20)
+				log.Printf("RSI14: %.2f", r14)
+				log.Printf("MACDLine: %.2f", ml)
+				log.Printf("MACDSignal: %.2f", ms)
+
+				action := s.decide(StrategyParams{
+					LatestPrice: asset.Close,
+					SuperTrend:  st,
+					UpperBand:   ub,
+					MiddleBand:  mb,
+					LowerBand:   lb,
+					Ema5:        e5,
+					Ema20:       e20,
+					Rsi14:       r14,
+					MacdLine:    ml,
+					MacdSignal:  ms,
+				})
+				ac <- action
+				wg.Add(6)
+			}
+
+			i++
+
+		}
+		close(ac)
+	}()
 
 	return ac
 }
 
-func (i *Scalping) Report(c <-chan *asset.Snapshot) *helper.Report {
+func (s Scalping) Report(c <-chan *asset.Snapshot) *helper.Report {
 	//
 	// snapshots[0] -> dates
 	// snapshots[1] -> Compute     -> actions -> annotations
@@ -251,11 +277,11 @@ func (i *Scalping) Report(c <-chan *asset.Snapshot) *helper.Report {
 	dates := asset.SnapshotsAsDates(snapshots[0])
 	closings := asset.SnapshotsAsClosings(snapshots[2])
 
-	actions, outcomes := strategy.ComputeWithOutcome(i, snapshots[1])
+	actions, outcomes := strategy.ComputeWithOutcome(s, snapshots[1])
 	annotations := strategy.ActionsToAnnotations(actions)
 	outcomes = helper.MultiplyBy(outcomes, 100)
 
-	report := helper.NewReport(i.Name(), dates)
+	report := helper.NewReport(s.Name(), dates)
 	report.AddChart()
 	report.AddChart()
 

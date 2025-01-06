@@ -3,6 +3,7 @@ package ingestors
 import (
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -41,6 +42,34 @@ func BinancePoller() ([]BinanceData, error) {
 	pollLastPrice(data)
 
 	return data, nil
+}
+
+func GetHistory(symbol string, from time.Time) chan *asset.Snapshot {
+	res := make(chan *asset.Snapshot)
+	f := from
+
+	go func() {
+		for {
+			klines, err := getKlines(symbol, f)
+			if err != nil {
+				log.Printf("Error getting klines: %v", err)
+				close(res)
+				break
+			}
+
+			for _, kline := range klines {
+				res <- &kline
+			}
+
+			if len(klines) == 0 || klines[len(klines)-1].Date.Truncate(time.Minute).Equal(time.Now().Truncate(time.Minute)) {
+				close(res)
+				break
+			}
+
+			f = klines[len(klines)-1].Date
+		}
+	}()
+	return res
 }
 
 func getSymbols() ([]string, error) {
