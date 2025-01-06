@@ -2,20 +2,23 @@ package main
 
 import (
 	"log"
+	"time"
 
-	"github.com/cinar/indicator/v2/helper"
+	"github.com/cinar/indicator/v2/asset"
+	"github.com/cinar/indicator/v2/backtest"
+	"github.com/cinar/indicator/v2/strategy"
 	"pivetta.se/crypro-spotter/src/ingestors"
+	"pivetta.se/crypro-spotter/src/reports"
 	"pivetta.se/crypro-spotter/src/strategies"
 )
 
 func main() {
-	bd, err := ingestors.BinancePoller()
+	// bd, err := ingestors.BinancePoller()
+	// if err != nil {
+	// 	log.Fatalf("Error polling Binance: %v", err)
+	// }
 
-	if err != nil {
-		log.Fatalf("Error polling Binance: %v", err)
-	}
-
-	btc := bd[0]
+	// btc := bd[0]
 
 	scalp := strategies.Scalping{
 		Weights: strategies.StrategyWeights{
@@ -33,33 +36,33 @@ func main() {
 		Stabilization: 100,
 	}
 
-	ac := scalp.Compute(helper.Buffered(btc.Klines, 50))
+	// ac := scalp.Compute(helper.Buffered(btc.Klines, 50))
 
-	for a := range ac {
-		log.Printf("Action: %v", a.Annotation())
+	// for a := range ac {
+	// 	log.Printf("Action: %v", a.Annotation())
+	// }
+
+	klines := ingestors.GetHistory("BTCUSDT", time.Now().Add(-6*time.Hour))
+
+	repo := asset.NewInMemoryRepository()
+
+	err := repo.Append("btc", klines)
+	if err != nil {
+		log.Fatalf("Error appending BTC data: %v", err)
 	}
 
-	// klines := ingestors.GetHistory("BTCUSDT", time.Now().Add(-1*time.Hour))
+	r := reports.NewConsoleReport()
 
-	// repo := asset.NewInMemoryRepository()
+	bt := backtest.NewBacktest(repo, r)
 
-	// err := repo.Append("btc", klines)
-	// if err != nil {
-	// 	log.Fatalf("Error appending BTC data: %v", err)
-	// }
+	bt.Strategies = []strategy.Strategy{
+		// strategy.NewBuyAndHoldStrategy(),
+		// momentum.NewAwesomeOscillatorStrategy(),
+		scalp,
+	}
 
-	// r := reports.NewConsoleReport()
-
-	// bt := backtest.NewBacktest(repo, r)
-
-	// bt.Strategies = []strategy.Strategy{
-	// 	// strategy.NewBuyAndHoldStrategy(),
-	// 	// momentum.NewAwesomeOscillatorStrategy(),
-	// 	scalp,
-	// }
-
-	// bt.Run()
-	// if err != nil {
-	// 	log.Fatalf("Error running backtest: %v", err)
-	// }
+	bt.Run()
+	if err != nil {
+		log.Fatalf("Error running backtest: %v", err)
+	}
 }

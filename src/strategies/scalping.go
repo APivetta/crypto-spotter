@@ -156,7 +156,7 @@ func (s Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Acti
 	var st, ub, mb, lb, e5, e20, r14, ml, ms float64
 	stable := false
 	ac := make(chan strategy.Action, 50)
-	ss := make(chan *asset.Snapshot)
+	ss := make(chan *asset.Snapshot, 50)
 	ind := s.getIndicators(ss)
 
 	var wg sync.WaitGroup
@@ -255,6 +255,8 @@ func (s Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Acti
 				})
 				ac <- action
 				wg.Add(6)
+			} else {
+				ac <- strategy.Hold
 			}
 
 			i++
