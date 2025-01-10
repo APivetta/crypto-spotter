@@ -34,13 +34,9 @@ type Indicators struct {
 type StrategyWeights struct {
 	SuperTrendWeight  float64
 	BollingerWeight   float64
-	Ema5Weight        float64
-	Ema20Weight       float64
+	EmaWeight         float64
 	RsiWeight         float64
-	RsiOverbought     float64
-	RsiOversold       float64
 	MacdWeight        float64
-	MacdThreshold     float64
 	StrengthThreshold float64
 }
 
@@ -100,26 +96,29 @@ func (Scalping) getIndicators(snapshots <-chan *asset.Snapshot) Indicators {
 func (s Scalping) decide(params StrategyParams) strategy.Action {
 	// Initialize signal strength
 	signalStrength := 0.0
+	rsiOverbought := 70.0
+	rsiOversold := 30.0
+	macdThreshold := 0.5
 
 	// EMA Crossover Logic
 	if params.Ema5 > params.Ema20 {
-		signalStrength += s.Weights.Ema5Weight // Bullish signal
+		signalStrength += s.Weights.EmaWeight // Bullish signal
 	} else if params.Ema5 < params.Ema20 {
-		signalStrength -= s.Weights.Ema20Weight // Bearish signal
+		signalStrength -= s.Weights.EmaWeight // Bearish signal
 	}
 
 	// RSI Logic
-	if params.Rsi14 > s.Weights.RsiOverbought {
+	if params.Rsi14 > rsiOverbought {
 		signalStrength -= s.Weights.RsiWeight // Bearish signal (overbought)
-	} else if params.Rsi14 < s.Weights.RsiOversold {
+	} else if params.Rsi14 < rsiOversold {
 		signalStrength += s.Weights.RsiWeight // Bullish signal (oversold)
 	}
 
 	// MACD Logic
 	macdDifference := params.MacdLine - params.MacdSignal
-	if macdDifference > s.Weights.MacdThreshold {
+	if macdDifference > macdThreshold {
 		signalStrength += s.Weights.MacdWeight // Bullish signal
-	} else if macdDifference < -s.Weights.MacdThreshold {
+	} else if macdDifference < -macdThreshold {
 		signalStrength -= s.Weights.MacdWeight // Bearish signal
 	}
 
@@ -220,7 +219,7 @@ func (s Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Acti
 	go func() {
 		i := 0
 		for asset := range snapshots {
-			log.Printf("Asset: %v, line %d", asset, i)
+			// log.Printf("Asset: %v, line %d", asset, i)
 			ss <- asset
 			wg.Wait()
 
@@ -231,15 +230,15 @@ func (s Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Acti
 			}
 
 			if i >= s.Stabilization {
-				log.Printf("SuperTrend: %.2f", st)
-				log.Printf("UpperBand: %.2f", ub)
-				log.Printf("MiddleBand: %.2f", mb)
-				log.Printf("LowerBand: %.2f", lb)
-				log.Printf("EMA5: %.2f", e5)
-				log.Printf("EMA20: %.2f", e20)
-				log.Printf("RSI14: %.2f", r14)
-				log.Printf("MACDLine: %.2f", ml)
-				log.Printf("MACDSignal: %.2f", ms)
+				// log.Printf("SuperTrend: %.2f", st)
+				// log.Printf("UpperBand: %.2f", ub)
+				// log.Printf("MiddleBand: %.2f", mb)
+				// log.Printf("LowerBand: %.2f", lb)
+				// log.Printf("EMA5: %.2f", e5)
+				// log.Printf("EMA20: %.2f", e20)
+				// log.Printf("RSI14: %.2f", r14)
+				// log.Printf("MACDLine: %.2f", ml)
+				// log.Printf("MACDSignal: %.2f", ms)
 
 				action := s.decide(StrategyParams{
 					LatestPrice: asset.Close,
@@ -266,6 +265,73 @@ func (s Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Acti
 	}()
 
 	return ac
+}
+
+// TODO: move to a better place
+type Position int
+
+const (
+	FLAT Position = iota
+	LONG
+	SHORT
+)
+
+func (s Scalping) ComputeWithOutcome(c <-chan *asset.Snapshot, withLog bool) (<-chan strategy.Action, <-chan float64) {
+	snapshots := helper.Duplicate(c, 2)
+
+	actions := helper.Duplicate(s.Compute(snapshots[0]), 2)
+	closings := asset.SnapshotsAsClosings(snapshots[1])
+
+	position := FLAT
+	entryPrice := 0.0
+	entryShares := 0.0
+	balance := 1.0
+	shares := 0.0
+	totalDiff := 0.0
+
+	outcomes := helper.Operate(closings, actions[1], func(value float64, action strategy.Action) float64 {
+		if position == FLAT {
+			if action == strategy.Buy {
+				position = LONG
+				entryPrice = value
+				shares = balance / value
+			} else if action == strategy.Sell {
+				position = SHORT
+				entryPrice = value
+				shares = balance / value
+				entryShares = shares
+			}
+			// TODO: implement take profit and stop loss logic
+		} else if position == LONG {
+			if action == strategy.Sell {
+				if withLog {
+					log.Printf("Long position closed entry: %.2f, exit: %.2f, diff: %.2f", entryPrice, value, value-entryPrice)
+					totalDiff += value - entryPrice
+				}
+
+				position = FLAT
+				balance = shares * value
+				shares = 0
+			}
+		} else if position == SHORT {
+			diff := entryPrice - value
+			shares = entryShares * (entryPrice + diff) / value
+			if action == strategy.Buy {
+				if withLog {
+					log.Printf("Short position closed entry: %.2f, exit: %.2f, diff: %.2f", entryPrice, value, diff)
+					totalDiff += diff
+				}
+
+				position = FLAT
+				shares = 0
+				entryShares = 0
+			}
+		}
+
+		return balance + (shares * float64(value)) - 1.0
+	})
+
+	return actions[0], outcomes
 }
 
 func (s Scalping) Report(c <-chan *asset.Snapshot) *helper.Report {
