@@ -15,9 +15,27 @@ import (
 
 type Scalping struct {
 	strategy.Strategy
-	Weights       StrategyWeights
-	Stabilization int
+	Weights         StrategyWeights
+	Stabilization   int
+	CurrentPosition *Position
 }
+
+// TODO: move to a better place
+type PositionType int
+
+const (
+	FLAT PositionType = iota
+	LONG
+	SHORT
+)
+
+type Position struct {
+	Type       PositionType
+	EntryPrice float64
+	EntryTime  time.Time
+}
+
+const Close strategy.Action = 2
 
 type Indicators struct {
 	superTrend <-chan float64
@@ -29,6 +47,7 @@ type Indicators struct {
 	rsi14      <-chan float64
 	macdLine   <-chan float64
 	macdSignal <-chan float64
+	atr        <-chan float64
 }
 
 type StrategyWeights struct {
@@ -38,19 +57,21 @@ type StrategyWeights struct {
 	RsiWeight         float64
 	MacdWeight        float64
 	StrengthThreshold float64
+	AtrMultiplier     float64
 }
 
 type StrategyParams struct {
-	LatestPrice float64
-	SuperTrend  float64
-	UpperBand   float64
-	MiddleBand  float64
-	LowerBand   float64
-	Ema5        float64
-	Ema20       float64
-	Rsi14       float64
-	MacdLine    float64
-	MacdSignal  float64
+	Snapshot   asset.Snapshot
+	SuperTrend float64
+	UpperBand  float64
+	MiddleBand float64
+	LowerBand  float64
+	Ema5       float64
+	Ema20      float64
+	Rsi14      float64
+	MacdLine   float64
+	MacdSignal float64
+	Atr        float64
 }
 
 func (Scalping) Name() string {
@@ -60,9 +81,9 @@ func (Scalping) Name() string {
 func (Scalping) getIndicators(snapshots <-chan *asset.Snapshot) Indicators {
 	// init channels
 	ss := helper.Duplicate(snapshots, 3)
-	close := helper.Duplicate(asset.SnapshotsAsClosings(ss[0]), 6)
-	low := helper.Duplicate(asset.SnapshotsAsLows(ss[1]), 1)
-	high := helper.Duplicate(asset.SnapshotsAsHighs(ss[2]), 1)
+	close := helper.Duplicate(asset.SnapshotsAsClosings(ss[0]), 7)
+	low := helper.Duplicate(asset.SnapshotsAsLows(ss[1]), 2)
+	high := helper.Duplicate(asset.SnapshotsAsHighs(ss[2]), 2)
 
 	// init indicators
 	emaFast := trend.NewEmaWithPeriod[float64](5)
@@ -71,9 +92,11 @@ func (Scalping) getIndicators(snapshots <-chan *asset.Snapshot) Indicators {
 	rsi := momentum.NewRsi[float64]()
 	macd := trend.NewMacd[float64]()
 	superTrend := volatility.NewSuperTrend[float64]()
+	atrInd := volatility.NewAtr[float64]()
 
 	// compute
 	st := superTrend.Compute(high[0], low[0], close[0])
+	atr := atrInd.Compute(high[1], low[1], close[6])
 	upperBand, middleBand, lowerBand := bollingerBands.Compute(close[1])
 	ema5 := emaFast.Compute(close[2])
 	ema20 := emaSlow.Compute(close[3])
@@ -90,15 +113,40 @@ func (Scalping) getIndicators(snapshots <-chan *asset.Snapshot) Indicators {
 		rsi14:      rsi14,
 		macdLine:   macdLine,
 		macdSignal: macdSignal,
+		atr:        atr,
 	}
 }
 
-func (s Scalping) decide(params StrategyParams) strategy.Action {
+func (s *Scalping) decide(params StrategyParams) strategy.Action {
 	// Initialize signal strength
 	signalStrength := 0.0
 	rsiOverbought := 70.0
 	rsiOversold := 30.0
 	macdThreshold := 0.5
+
+	//check if we have a position and TP and SL levels
+	// if s.CurrentPosition != nil {
+	// 	var tp, sl float64
+	// 	multi := s.Weights.AtrMultiplier * params.Atr
+
+	// 	if s.CurrentPosition.Type == LONG {
+	// 		tp = s.CurrentPosition.EntryPrice + multi
+	// 		sl = s.CurrentPosition.EntryPrice - (multi / 2)
+
+	// 		if params.Snapshot.High >= tp || params.Snapshot.Low <= sl {
+	// 			s.CurrentPosition = nil
+	// 			return Close
+	// 		}
+	// 	} else if s.CurrentPosition.Type == SHORT {
+	// 		tp = s.CurrentPosition.EntryPrice - multi
+	// 		sl = s.CurrentPosition.EntryPrice + (multi / 2)
+
+	// 		if params.Snapshot.Low <= tp || params.Snapshot.High >= sl {
+	// 			s.CurrentPosition = nil
+	// 			return Close
+	// 		}
+	// 	}
+	// }
 
 	// EMA Crossover Logic
 	if params.Ema5 > params.Ema20 {
@@ -123,28 +171,49 @@ func (s Scalping) decide(params StrategyParams) strategy.Action {
 	}
 
 	// SuperTrend Logic
-	if params.LatestPrice > params.SuperTrend {
+	if params.Snapshot.Close > params.SuperTrend {
 		signalStrength += s.Weights.SuperTrendWeight // Bullish signal
 	} else {
 		signalStrength -= s.Weights.SuperTrendWeight // Bearish signal
 	}
 
 	// Bollinger Band Logic
-	if params.LatestPrice < params.LowerBand {
+	if params.Snapshot.Close < params.LowerBand {
 		signalStrength += s.Weights.BollingerWeight // Bullish signal (price near lower band)
-	} else if params.LatestPrice > params.UpperBand {
+	} else if params.Snapshot.Close > params.UpperBand {
 		signalStrength -= s.Weights.BollingerWeight // Bearish signal (price near upper band)
-	} else if params.LatestPrice > params.MiddleBand {
+	} else if params.Snapshot.Close > params.MiddleBand {
 		signalStrength += s.Weights.BollingerWeight / 2 // Slightly bullish
-	} else if params.LatestPrice < params.MiddleBand {
+	} else if params.Snapshot.Close < params.MiddleBand {
 		signalStrength -= s.Weights.BollingerWeight / 2 // Slightly bearish
 	}
 
 	// Decision Logic
 	// log.Printf("Signal Strength: %.2f", signalStrength)
 	if signalStrength > s.Weights.StrengthThreshold {
+		if s.CurrentPosition != nil && s.CurrentPosition.Type == SHORT {
+			s.CurrentPosition = nil
+			return Close
+		}
+
+		s.CurrentPosition = &Position{
+			Type:       LONG,
+			EntryPrice: params.Snapshot.Close,
+			EntryTime:  params.Snapshot.Date,
+		}
+
 		return strategy.Buy
 	} else if signalStrength < -s.Weights.StrengthThreshold {
+		if s.CurrentPosition != nil && s.CurrentPosition.Type == LONG {
+			s.CurrentPosition = nil
+			return Close
+		}
+
+		s.CurrentPosition = &Position{
+			Type:       SHORT,
+			EntryPrice: params.Snapshot.Close,
+			EntryTime:  params.Snapshot.Date,
+		}
 		return strategy.Sell
 	} else {
 		return strategy.Hold
@@ -152,13 +221,22 @@ func (s Scalping) decide(params StrategyParams) strategy.Action {
 }
 
 func (s Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Action {
-	var st, ub, mb, lb, e5, e20, r14, ml, ms float64
+	var st, ub, mb, lb, e5, e20, r14, ml, ms, atr float64
 	stable := false
 	ac := make(chan strategy.Action, 50)
 	ss := make(chan *asset.Snapshot, 50)
 	ind := s.getIndicators(ss)
 
 	var wg sync.WaitGroup
+	go func() {
+		for {
+			atr = <-ind.atr
+			if stable {
+				wg.Done()
+			}
+		}
+	}()
+
 	go func() {
 		for {
 			st = <-ind.superTrend
@@ -241,19 +319,20 @@ func (s Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Acti
 				// log.Printf("MACDSignal: %.2f", ms)
 
 				action := s.decide(StrategyParams{
-					LatestPrice: asset.Close,
-					SuperTrend:  st,
-					UpperBand:   ub,
-					MiddleBand:  mb,
-					LowerBand:   lb,
-					Ema5:        e5,
-					Ema20:       e20,
-					Rsi14:       r14,
-					MacdLine:    ml,
-					MacdSignal:  ms,
+					Snapshot:   *asset,
+					SuperTrend: st,
+					UpperBand:  ub,
+					MiddleBand: mb,
+					LowerBand:  lb,
+					Ema5:       e5,
+					Ema20:      e20,
+					Rsi14:      r14,
+					MacdLine:   ml,
+					MacdSignal: ms,
+					Atr:        atr,
 				})
 				ac <- action
-				wg.Add(6)
+				wg.Add(7)
 			} else {
 				ac <- strategy.Hold
 			}
@@ -267,20 +346,9 @@ func (s Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Acti
 	return ac
 }
 
-// TODO: move to a better place
-type Position int
-
-const (
-	FLAT Position = iota
-	LONG
-	SHORT
-)
-
 func (s Scalping) ComputeWithOutcome(c <-chan *asset.Snapshot, withLog bool) (<-chan strategy.Action, <-chan float64) {
-	snapshots := helper.Duplicate(c, 2)
-
+	snapshots := helper.Duplicate(c, 3)
 	actions := helper.Duplicate(s.Compute(snapshots[0]), 2)
-	closings := asset.SnapshotsAsClosings(snapshots[1])
 
 	position := FLAT
 	entryPrice := 0.0
@@ -288,47 +356,56 @@ func (s Scalping) ComputeWithOutcome(c <-chan *asset.Snapshot, withLog bool) (<-
 	balance := 1.0
 	shares := 0.0
 	totalDiff := 0.0
+	minutes := 0
 
-	outcomes := helper.Operate(closings, actions[1], func(value float64, action strategy.Action) float64 {
+	go func() {
+		for range snapshots[2] {
+		}
+		if withLog {
+			log.Printf("Total Diff: %.2f", totalDiff)
+		}
+	}()
+
+	outcomes := helper.Operate(snapshots[1], actions[1], func(ss *asset.Snapshot, action strategy.Action) float64 {
+		close := ss.Close
+		minutes++
 		if position == FLAT {
 			if action == strategy.Buy {
 				position = LONG
-				entryPrice = value
-				shares = balance / value
+				entryPrice = close
+				shares = balance / close
+				minutes = 0
 			} else if action == strategy.Sell {
 				position = SHORT
-				entryPrice = value
-				shares = balance / value
+				entryPrice = close
+				shares = balance / close
 				entryShares = shares
+				minutes = 0
 			}
-			// TODO: implement take profit and stop loss logic
-		} else if position == LONG {
-			if action == strategy.Sell {
-				if withLog {
-					log.Printf("Long position closed entry: %.2f, exit: %.2f, diff: %.2f", entryPrice, value, value-entryPrice)
-					totalDiff += value - entryPrice
-				}
+		} else if position == LONG && action == Close {
+			if withLog {
+				log.Printf("Long position closed entry: %.2f, exit: %.2f, diff: %.2f, minutes %d", entryPrice, close, close-entryPrice, minutes)
+				totalDiff += close - entryPrice
+			}
+			position = FLAT
+			balance = shares * close
+			shares = 0
 
-				position = FLAT
-				balance = shares * value
-				shares = 0
-			}
-		} else if position == SHORT {
-			diff := entryPrice - value
-			shares = entryShares * (entryPrice + diff) / value
-			if action == strategy.Buy {
-				if withLog {
-					log.Printf("Short position closed entry: %.2f, exit: %.2f, diff: %.2f", entryPrice, value, diff)
-					totalDiff += diff
-				}
+		} else if position == SHORT && action == Close {
+			diff := entryPrice - close
+			shares = entryShares * (entryPrice + diff) / close
 
-				position = FLAT
-				shares = 0
-				entryShares = 0
+			if withLog {
+				log.Printf("Short position closed entry: %.2f, exit: %.2f, diff: %.2f, minutes %d", entryPrice, close, diff, minutes)
+				totalDiff += diff
 			}
+
+			position = FLAT
+			shares = 0
+			entryShares = 0
 		}
 
-		return balance + (shares * float64(value)) - 1.0
+		return balance + (shares * float64(close)) - 1.0
 	})
 
 	return actions[0], outcomes

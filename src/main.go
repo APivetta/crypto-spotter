@@ -63,12 +63,14 @@ func main() {
 
 	scalp := strategies.Scalping{
 		Weights: strategies.StrategyWeights{
-			SuperTrendWeight:  2.4102742056013584,
-			BollingerWeight:   2.241427642411903,
-			EmaWeight:         0.488966530016531,
-			RsiWeight:         1.4152026049544952,
-			MacdWeight:        0.9197451562266742,
-			StrengthThreshold: 0.6512799251718062},
+			SuperTrendWeight:  1.9531723182587075,
+			BollingerWeight:   0.8935499093080583,
+			EmaWeight:         1.6072579500973054,
+			RsiWeight:         1.0802303952939627,
+			MacdWeight:        0.7452113290101368,
+			StrengthThreshold: 0.33334111669554334,
+			AtrMultiplier:     2.410363237845171,
+		},
 		Stabilization: 100,
 	}
 

@@ -25,12 +25,13 @@ type Score struct {
 
 func GenerateRandomWeights() strategies.StrategyWeights {
 	return strategies.StrategyWeights{
-		SuperTrendWeight:  rand.Float64() * 3,  // Range [0, 3]
-		BollingerWeight:   rand.Float64() * 3,  // Range [0, 3]
-		EmaWeight:         rand.Float64() * 3,  // Range [0, 3]
-		RsiWeight:         rand.Float64() * 3,  // Range [0, 3]
-		MacdWeight:        rand.Float64() * 3,  // Range [0, 3]
-		StrengthThreshold: rand.Float64() * 10, // Range [0, 10]
+		SuperTrendWeight:  rand.Float64() * 3,       // Range [0, 3]
+		BollingerWeight:   rand.Float64() * 3,       // Range [0, 3]
+		EmaWeight:         rand.Float64() * 3,       // Range [0, 3]
+		RsiWeight:         rand.Float64() * 3,       // Range [0, 3]
+		MacdWeight:        rand.Float64() * 3,       // Range [0, 3]
+		AtrMultiplier:     rand.Float64()*2.5 + 1.5, // Range [1.5, 4]
+		StrengthThreshold: rand.Float64() * 10,      // Range [0, 10]
 	}
 }
 
@@ -43,6 +44,7 @@ func Crossover(parent1, parent2 strategies.StrategyWeights) strategies.StrategyW
 		RsiWeight:         (parent1.RsiWeight + parent2.RsiWeight) / 2,
 		MacdWeight:        (parent1.MacdWeight + parent2.MacdWeight) / 2,
 		StrengthThreshold: (parent1.StrengthThreshold + parent2.StrengthThreshold) / 2,
+		AtrMultiplier:     (parent1.AtrMultiplier + parent2.AtrMultiplier) / 2,
 	}
 }
 
@@ -66,6 +68,9 @@ func Mutate(weights strategies.StrategyWeights) strategies.StrategyWeights {
 	if rand.Float64() < MutationRate {
 		weights.StrengthThreshold += rand.Float64()*0.5 - 0.25
 	}
+	if rand.Float64() < MutationRate {
+		weights.AtrMultiplier += rand.Float64()*0.4 - 0.2
+	}
 
 	if weights.SuperTrendWeight < 0 {
 		weights.SuperTrendWeight = 0
@@ -85,6 +90,9 @@ func Mutate(weights strategies.StrategyWeights) strategies.StrategyWeights {
 	if weights.StrengthThreshold < 0 {
 		weights.StrengthThreshold = 0
 	}
+	if weights.AtrMultiplier < 1.5 {
+		weights.AtrMultiplier = 1.5
+	}
 
 	if weights.SuperTrendWeight > 3 {
 		weights.SuperTrendWeight = 3
@@ -103,6 +111,9 @@ func Mutate(weights strategies.StrategyWeights) strategies.StrategyWeights {
 	}
 	if weights.StrengthThreshold > 10 {
 		weights.StrengthThreshold = 10
+	}
+	if weights.AtrMultiplier > 4 {
+		weights.AtrMultiplier = 4
 	}
 
 	return weights
