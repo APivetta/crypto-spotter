@@ -4,9 +4,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/cinar/indicator/v2/asset"
-	"pivetta.se/crypro-spotter/src/ingestors"
-	"pivetta.se/crypro-spotter/src/strategies"
+	"pivetta.se/crypro-spotter/src/genetics"
+	"pivetta.se/crypro-spotter/src/repositories"
 )
 
 func main() {
@@ -35,14 +34,14 @@ func main() {
 	// 	log.Printf("Action: %v", a.Annotation())
 	// }
 
-	klines := ingestors.GetHistory("BTCUSDT", time.Now().Add(-24*time.Hour))
+	// klines := ingestors.GetHistory("BTCUSDT", time.Now().Add(-24*time.Hour))
 
-	repo := asset.NewInMemoryRepository()
+	// repo := asset.NewInMemoryRepository()
 
-	err := repo.Append("btc", klines)
-	if err != nil {
-		log.Fatalf("Error appending BTC data: %v", err)
-	}
+	// err := repo.Append("btc", klines)
+	// if err != nil {
+	// 	log.Fatalf("Error appending BTC data: %v", err)
+	// }
 
 	// r := reports.NewConsoleReport()
 
@@ -61,27 +60,37 @@ func main() {
 
 	// genetics.RunGenetic(repo)
 
-	scalp := strategies.Scalping{
-		Weights: strategies.StrategyWeights{
-			SuperTrendWeight:  1.9531723182587075,
-			BollingerWeight:   0.8935499093080583,
-			EmaWeight:         1.6072579500973054,
-			RsiWeight:         1.0802303952939627,
-			MacdWeight:        0.7452113290101368,
-			StrengthThreshold: 0.33334111669554334,
-			AtrMultiplier:     2.410363237845171,
-		},
-		Stabilization: 100,
-	}
+	// scalp := strategies.Scalping{
+	// 	Weights: strategies.StrategyWeights{
+	// 		SuperTrendWeight:  1.9531723182587075,
+	// 		BollingerWeight:   0.8935499093080583,
+	// 		EmaWeight:         1.6072579500973054,
+	// 		RsiWeight:         1.0802303952939627,
+	// 		MacdWeight:        0.7452113290101368,
+	// 		StrengthThreshold: 0.33334111669554334,
+	// 		AtrMultiplier:     2.410363237845171,
+	// 	},
+	// 	Stabilization: 100,
+	// }
 
-	btc, err := repo.Get("btc")
+	// btc, err := repo.Get("BTCUSDT")
+	// if err != nil {
+	// 	log.Fatalf("Error getting BTC data: %v", err)
+	// }
+
+	// ac, outcome := scalp.ComputeWithOutcome(btc, true)
+
+	// for range outcome {
+	// 	<-ac
+	// }
+
+	repo, err := repositories.NewDBRepository("BTCUSDT", time.Now().Add(-24*time.Hour))
 	if err != nil {
-		log.Fatalf("Error getting BTC data: %v", err)
+		log.Fatalf("Error creating repository: %v", err)
 	}
 
-	ac, outcome := scalp.ComputeWithOutcome(btc, true)
-
-	for range outcome {
-		<-ac
+	err = genetics.RunGenetic(repo, "BTCUSDT")
+	if err != nil {
+		log.Fatalf("Error running genetic algorithm: %v", err)
 	}
 }

@@ -14,8 +14,8 @@ import (
 
 const (
 	PopulationSize = 100
-	Generations    = 10
-	MutationRate   = 0.25
+	Generations    = 50
+	MutationRate   = 0.2
 )
 
 type Score struct {
@@ -139,7 +139,7 @@ func FitnessFunction(weights strategies.StrategyWeights, assets <-chan *asset.Sn
 	}
 }
 
-func RunGenetic(repo asset.Repository) {
+func RunGenetic(repo asset.Repository, a string) error {
 	log.Println("Running Genetic Algorithm")
 	// Initialize population
 	population := make([]strategies.StrategyWeights, PopulationSize)
@@ -154,9 +154,9 @@ func RunGenetic(repo asset.Repository) {
 		fitnessScores := make([]Score, PopulationSize)
 
 		log.Printf("Generation %d\n", gen)
-		snapshots, err := repo.Get("btc")
+		snapshots, err := repo.Get(a)
 		if err != nil {
-			log.Fatalf("Error getting BTC data: %v", err)
+			return fmt.Errorf("Error getting BTC data: %v", err)
 		}
 		ss := helper.Duplicate(snapshots, PopulationSize)
 
@@ -180,50 +180,61 @@ func RunGenetic(repo asset.Repository) {
 			return 0
 		})
 
-		// Create new population
-		newPopulation := make([]strategies.StrategyWeights, PopulationSize)
-
-		// Print top 5 individuals and add to next gen with its mutation
-		for i := 0; i < 5; i++ {
-			fmt.Printf("Fitness: %.4f, Weights: %+v\n", fitnessScores[i].Value, fitnessScores[i].Individual)
-			newPopulation[i] = fitnessScores[i].Individual
-			newPopulation[i+5] = Mutate(fitnessScores[i].Individual)
-
-		}
-
-		// Select most pop from 33% of the best individuals
-		for i := 10; i < PopulationSize-10; i++ {
-			parent1 := fitnessScores[rand.IntN(PopulationSize/3)].Individual
-			parent2 := fitnessScores[rand.IntN(PopulationSize/3)].Individual
-
-			// Crossover
-			child := Crossover(parent1, parent2)
-
-			// Mutate
-			child = Mutate(child)
-
-			newPopulation[i] = child
-		}
-
-		// last 10 individuals are random from all pop
-		for i := PopulationSize - 10; i < PopulationSize; i++ {
-			parent1 := fitnessScores[rand.IntN(PopulationSize)].Individual
-			parent2 := fitnessScores[rand.IntN(PopulationSize)].Individual
-
-			// Crossover
-			child := Crossover(parent1, parent2)
-
-			// Mutate
-			child = Mutate(child)
-
-			newPopulation[i] = child
-		}
-
 		// Replace old population with new one
-		population = newPopulation
+		population = generateNewPop(fitnessScores)
 	}
 
 	// // Final output
 	// bestIndividual := SelectBest(population, fitnessScoresdcv )
 	// fmt.Printf("Best Strategy Weights: %+v\n", bestIndividual)
+
+	return nil
+}
+
+func generateNewPop(fitnessScores []Score) []strategies.StrategyWeights {
+	newPopulation := make([]strategies.StrategyWeights, PopulationSize)
+
+	// Elitism: Print top 5 individuals and add to next gen
+	for i := 0; i < 5; i++ {
+		fmt.Printf("Fitness: %.4f, Weights: %+v\n", fitnessScores[i].Value, fitnessScores[i].Individual)
+		newPopulation[i] = fitnessScores[i].Individual
+	}
+
+	// Tournament selection for most
+	for i := 5; i < PopulationSize-20; i++ {
+		// Select 5 random individuals
+		tournament := make([]Score, 5)
+		for j := 0; j < 5; j++ {
+			tournament[j] = fitnessScores[rand.IntN(PopulationSize)]
+		}
+
+		// Sort by fitness
+		slices.SortFunc(tournament, func(a, b Score) int {
+			if a.Value < b.Value {
+				return 1
+			}
+			if a.Value > b.Value {
+				return -1
+			}
+			return 0
+		})
+
+		parent1 := tournament[0].Individual
+		parent2 := tournament[1].Individual
+
+		// Crossover
+		child := Crossover(parent1, parent2)
+
+		// Mutate
+		child = Mutate(child)
+
+		newPopulation[i] = child
+	}
+
+	// last 20 individuals are random new individuals for diversity
+	for i := PopulationSize - 20; i < PopulationSize; i++ {
+		newPopulation[i] = GenerateRandomWeights()
+	}
+
+	return newPopulation
 }
