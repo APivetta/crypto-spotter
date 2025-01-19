@@ -37,10 +37,11 @@ func main() {
 
 	var date time.Time
 	if recentSnapshot == nil {
-		date = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+		date = time.Now().Add(-15 * 24 * time.Hour).Truncate(24 * time.Hour).UTC()
 		log.Printf("No snapshots found for %s. Fetching all snapshots since %v\n", ASSET, date)
 	} else {
-		date = recentSnapshot.Date.Add(-1 * time.Hour) // hack compensate to UTC
+		cleanup(db, ASSET)
+		date = recentSnapshot.Date
 		log.Printf("Fetching snapshots since %v\n", date)
 	}
 
@@ -72,16 +73,26 @@ func connectDB(host string, port int, user, password, dbname string) (*sql.DB, e
 
 func getLatestSnapshot(db *sql.DB, a string) (*asset.Snapshot, error) {
 	query := `SELECT date, open, high, low, close, volume FROM snapshots WHERE asset = $1 ORDER BY date DESC LIMIT 1`
-	row := db.QueryRow(query, a)
+	layout := "2006-01-02T15:04:05Z"
 
+	row := db.QueryRow(query, a)
+	var dateStr string
 	var snapshot asset.Snapshot
-	err := row.Scan(&snapshot.Date, &snapshot.Open, &snapshot.High, &snapshot.Low, &snapshot.Close, &snapshot.Volume)
+	err := row.Scan(&dateStr, &snapshot.Open, &snapshot.High, &snapshot.Low, &snapshot.Close, &snapshot.Volume)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("getMostRecentSnapshot: %w", err)
 	}
+
+	localLocation := time.Now().Location()
+	parsed, err := time.ParseInLocation(layout, dateStr, localLocation)
+	if err != nil {
+		return nil, fmt.Errorf("getMostRecentSnapshot, parse date: %w", err)
+	}
+
+	snapshot.Date = parsed
 
 	return &snapshot, nil
 }
@@ -94,6 +105,17 @@ func insertSnapshots(db *sql.DB, ss chan *asset.Snapshot) error {
 		if err != nil {
 			return fmt.Errorf("insertSnapshots: %w", err)
 		}
+	}
+	return nil
+}
+
+func cleanup(db *sql.DB, a string) error {
+	date := time.Now().Add(-15 * 24 * time.Hour).Truncate(24 * time.Hour).UTC()
+	log.Printf("Cleaning up snapshots before %v\n", date)
+	query := `DELETE FROM snapshots WHERE asset = $1 AND date < $2`
+	_, err := db.Exec(query, a, date)
+	if err != nil {
+		return fmt.Errorf("cleanup: %w", err)
 	}
 	return nil
 }
