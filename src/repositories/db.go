@@ -60,12 +60,12 @@ func GetLatestSnapshot(db *sql.DB, a string) (*asset.Snapshot, error) {
 	return &snapshot, nil
 }
 
-func GetSnapshots(db *sql.DB, a string, from time.Time) ([]*asset.Snapshot, error) {
-	query := `SELECT date, open, high, low, close, volume FROM snapshots WHERE asset = $1 AND date >= $2 ORDER BY date DESC`
+func GetSnapshots(db *sql.DB, a string, limit int) ([]*asset.Snapshot, error) {
+	query := `SELECT date, open, high, low, close, volume FROM snapshots WHERE asset = $1 ORDER BY date DESC LIMIT $2`
 	layout := "2006-01-02T15:04:05Z"
 	var dateStr string
 
-	rows, err := db.Query(query, a, from)
+	rows, err := db.Query(query, a, limit)
 	if err != nil {
 		return nil, fmt.Errorf("getSnapshots: %w", err)
 	}
@@ -95,7 +95,7 @@ func GetSnapshots(db *sql.DB, a string, from time.Time) ([]*asset.Snapshot, erro
 func InsertSnapshots(db *sql.DB, a string, ss chan *asset.Snapshot) error {
 	query := `INSERT INTO snapshots (asset, date, open, high, low, close, volume) VALUES ($1, $2, $3, $4, $5, $6, $7)`
 	for snapshot := range ss {
-		log.Printf("Inserting snapshot: %+v\n", snapshot)
+		// log.Printf("Inserting snapshot: %+v\n", snapshot)
 		_, err := db.Exec(query, a, snapshot.Date, snapshot.Open, snapshot.High, snapshot.Low, snapshot.Close, snapshot.Volume)
 		if err != nil {
 			return fmt.Errorf("insertSnapshots: %w", err)
@@ -115,7 +115,7 @@ func Cleanup(db *sql.DB, a string) error {
 	return nil
 }
 
-func NewDBRepository(a string, from time.Time) (asset.Repository, error) {
+func NewDBRepository(a string, limit int) (asset.Repository, error) {
 	host := flag.String("host", "localhost", "Database host")
 	port := flag.Int("port", 5433, "Database port")
 	user := flag.String("user", "postgres", "Database user")
@@ -131,7 +131,7 @@ func NewDBRepository(a string, from time.Time) (asset.Repository, error) {
 
 	repo := asset.NewInMemoryRepository()
 
-	ss, err := GetSnapshots(db, a, from)
+	ss, err := GetSnapshots(db, a, limit)
 	if err != nil {
 		return nil, fmt.Errorf("Error fetching snapshots: %w", err)
 	}

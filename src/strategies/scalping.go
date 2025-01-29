@@ -124,24 +124,27 @@ func (s *Scalping) decide(params StrategyParams) strategy.Action {
 	rsiOversold := 30.0
 	macdThreshold := 0.5
 
-	//check if we have a position and TP and SL levels
+	// // check if we have a position and TP and SL levels
 	// if s.CurrentPosition != nil {
-	// 	var tp, sl float64
+	// 	// var tp, sl float64
+	// 	var sl float64
 	// 	multi := s.Weights.AtrMultiplier * params.Atr
 
 	// 	if s.CurrentPosition.Type == LONG {
-	// 		tp = s.CurrentPosition.EntryPrice + multi
+	// 		// tp = s.CurrentPosition.EntryPrice + multi
 	// 		sl = s.CurrentPosition.EntryPrice - (multi / 2)
 
-	// 		if params.Snapshot.High >= tp || params.Snapshot.Low <= sl {
+	// 		if params.Snapshot.Low <= sl {
+	// 			// if params.Snapshot.High >= tp || params.Snapshot.Low <= sl {
 	// 			s.CurrentPosition = nil
 	// 			return Close
 	// 		}
 	// 	} else if s.CurrentPosition.Type == SHORT {
-	// 		tp = s.CurrentPosition.EntryPrice - multi
+	// 		// tp = s.CurrentPosition.EntryPrice - multi
 	// 		sl = s.CurrentPosition.EntryPrice + (multi / 2)
 
-	// 		if params.Snapshot.Low <= tp || params.Snapshot.High >= sl {
+	// 		if params.Snapshot.High >= sl {
+	// 			// if params.Snapshot.Low <= tp || params.Snapshot.High >= sl {
 	// 			s.CurrentPosition = nil
 	// 			return Close
 	// 		}
@@ -350,6 +353,8 @@ func (s Scalping) ComputeWithOutcome(c <-chan *asset.Snapshot, withLog bool) (<-
 	snapshots := helper.Duplicate(c, 3)
 	actions := helper.Duplicate(s.Compute(snapshots[0]), 2)
 
+	high := 0.0
+	low := 0.0
 	position := FLAT
 	entryPrice := 0.0
 	entryShares := 0.0
@@ -369,22 +374,37 @@ func (s Scalping) ComputeWithOutcome(c <-chan *asset.Snapshot, withLog bool) (<-
 	outcomes := helper.Operate(snapshots[1], actions[1], func(ss *asset.Snapshot, action strategy.Action) float64 {
 		close := ss.Close
 		minutes++
+
+		if position != FLAT {
+			if ss.High > high {
+				high = ss.High
+			}
+
+			if ss.Low < low {
+				low = ss.Low
+			}
+		}
+
 		if position == FLAT {
 			if action == strategy.Buy {
 				position = LONG
 				entryPrice = close
+				high = close
+				low = close
 				shares = balance / close
 				minutes = 0
 			} else if action == strategy.Sell {
 				position = SHORT
 				entryPrice = close
+				high = close
+				low = close
 				shares = balance / close
 				entryShares = shares
 				minutes = 0
 			}
 		} else if position == LONG && action == Close {
 			if withLog {
-				log.Printf("Long position closed entry: %.2f, exit: %.2f, diff: %.2f, minutes %d", entryPrice, close, close-entryPrice, minutes)
+				log.Printf("Long position closed. entry: %.2f, exit: %.2f, diff: %.2f, minutes %d, high: %.2f, low: %.2f", entryPrice, close, close-entryPrice, minutes, high, low)
 				totalDiff += close - entryPrice
 			}
 			position = FLAT
@@ -396,7 +416,7 @@ func (s Scalping) ComputeWithOutcome(c <-chan *asset.Snapshot, withLog bool) (<-
 			shares = entryShares * (entryPrice + diff) / close
 
 			if withLog {
-				log.Printf("Short position closed entry: %.2f, exit: %.2f, diff: %.2f, minutes %d", entryPrice, close, diff, minutes)
+				log.Printf("Short position closed. entry: %.2f, exit: %.2f, diff: %.2f, minutes %d, high: %.2f, low: %.2f", entryPrice, close, diff, minutes, high, low)
 				totalDiff += diff
 			}
 

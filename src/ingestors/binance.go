@@ -23,7 +23,7 @@ const KLINE_LIMIT = "300"
 const KLINE_INTERVAL = "1m"
 
 func BinancePoller() ([]BinanceData, error) {
-	symbols, err := getSymbols()
+	symbols, err := GetSymbols(1)
 	if err != nil {
 		return nil, err
 	}
@@ -72,9 +72,8 @@ func GetHistory(symbol string, from time.Time) chan *asset.Snapshot {
 	return res
 }
 
-func getSymbols() ([]string, error) {
+func GetSymbols(count int) ([]string, error) {
 	result := []string{}
-	count := 1
 	resp, err := http.Get("https://fapi.binance.com/fapi/v1/exchangeInfo")
 	if err != nil {
 		return nil, err
