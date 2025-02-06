@@ -25,13 +25,13 @@ type Score struct {
 
 func GenerateRandomWeights() strategies.StrategyWeights {
 	return strategies.StrategyWeights{
-		SuperTrendWeight:  rand.Float64() * 3,       // Range [0, 3]
-		BollingerWeight:   rand.Float64() * 3,       // Range [0, 3]
-		EmaWeight:         rand.Float64() * 3,       // Range [0, 3]
-		RsiWeight:         rand.Float64() * 3,       // Range [0, 3]
-		MacdWeight:        rand.Float64() * 3,       // Range [0, 3]
-		AtrMultiplier:     rand.Float64()*2.5 + 1.5, // Range [1.5, 4]
-		StrengthThreshold: rand.Float64() * 10,      // Range [0, 10]
+		SuperTrendWeight:  float64(rand.IntN(7)) * 0.5,     // Range [0, 3] in 0.5 increments
+		BollingerWeight:   float64(rand.IntN(7)) * 0.5,     // Range [0, 3]
+		EmaWeight:         float64(rand.IntN(7)) * 0.5,     // Range [0, 3]
+		RsiWeight:         float64(rand.IntN(7)) * 0.5,     // Range [0, 3]
+		MacdWeight:        float64(rand.IntN(7)) * 0.5,     // Range [0, 3]
+		AtrMultiplier:     float64(rand.IntN(6))*0.5 + 1.5, // Range [1.5, 4]
+		StrengthThreshold: float64(rand.IntN(21)) * 0.5,    // Range [0, 10]
 	}
 }
 
@@ -51,22 +51,22 @@ func Crossover(parent1, parent2 strategies.StrategyWeights) strategies.StrategyW
 // Mutate applies random changes to a StrategyWeights
 func Mutate(weights strategies.StrategyWeights) strategies.StrategyWeights {
 	if rand.Float64() < MutationRate {
-		weights.SuperTrendWeight += rand.Float64()*0.2 - 0.1
+		weights.SuperTrendWeight += rand.Float64()*0.5 - 0.25
 	}
 	if rand.Float64() < MutationRate {
-		weights.BollingerWeight += rand.Float64()*0.2 - 0.1
+		weights.BollingerWeight += rand.Float64()*0.5 - 0.25
 	}
 	if rand.Float64() < MutationRate {
-		weights.EmaWeight += rand.Float64()*0.2 - 0.1
+		weights.EmaWeight += rand.Float64()*0.5 - 0.25
 	}
 	if rand.Float64() < MutationRate {
-		weights.RsiWeight += rand.Float64()*0.2 - 0.1
+		weights.RsiWeight += rand.Float64()*0.5 - 0.25
 	}
 	if rand.Float64() < MutationRate {
-		weights.MacdWeight += rand.Float64()*0.2 - 0.1
+		weights.MacdWeight += rand.Float64()*0.5 - 0.25
 	}
 	if rand.Float64() < MutationRate {
-		weights.StrengthThreshold += rand.Float64()*0.5 - 0.25
+		weights.StrengthThreshold += rand.Float64() - 0.5
 	}
 	if rand.Float64() < MutationRate {
 		weights.AtrMultiplier += rand.Float64()*0.4 - 0.2

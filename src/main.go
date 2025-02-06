@@ -12,13 +12,13 @@ import (
 )
 
 func main() {
-	// geneticsRun()
+	//geneticsRun()
 	backtestRun()
 	// liveRun()
 }
 
 func geneticsRun() {
-	historyMinutes := 24 * 60 * 3
+	historyMinutes := 24 * 60 * 1
 	repo, err := repositories.NewDBRepository("BTCUSDT", historyMinutes)
 	if err != nil {
 		log.Fatalf("Error creating repository: %v", err)
@@ -31,7 +31,7 @@ func geneticsRun() {
 }
 
 func backtestRun() {
-	historyMinutes := 24 * 60 * 3
+	historyMinutes := 24 * 60 * 7
 	repo, err := repositories.NewDBRepository("BTCUSDT", historyMinutes)
 	if err != nil {
 		log.Fatalf("Error creating repository: %v", err)
@@ -39,15 +39,16 @@ func backtestRun() {
 
 	scalp := strategies.Scalping{
 		Weights: strategies.StrategyWeights{
-			SuperTrendWeight:  1.6504381469473963,
-			BollingerWeight:   0.2640089297197406,
-			EmaWeight:         0.3273739665274869,
-			RsiWeight:         2.6183960912637256,
-			MacdWeight:        0.3178607375535859,
-			StrengthThreshold: 2.666458273443392,
-			AtrMultiplier:     2,
+			SuperTrendWeight:  0.26982423289769386,
+			BollingerWeight:   0.10180437138661834,
+			EmaWeight:         0.5024262049861916,
+			RsiWeight:         2.9068689490984467,
+			MacdWeight:        0.6119196362815509,
+			StrengthThreshold: 0.9852577989940008,
+			AtrMultiplier:     3.3836230562644802,
 		},
 		Stabilization: 100,
+		WithSL:        true,
 	}
 
 	btc, err := repo.Get("BTCUSDT")

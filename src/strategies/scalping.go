@@ -18,6 +18,8 @@ type Scalping struct {
 	Weights         StrategyWeights
 	Stabilization   int
 	CurrentPosition *Position
+	WithSL          bool
+	WithTP          bool
 }
 
 // TODO: move to a better place
@@ -124,32 +126,44 @@ func (s *Scalping) decide(params StrategyParams) strategy.Action {
 	rsiOversold := 30.0
 	macdThreshold := 0.5
 
-	// // check if we have a position and TP and SL levels
-	// if s.CurrentPosition != nil {
-	// 	// var tp, sl float64
-	// 	var sl float64
-	// 	multi := s.Weights.AtrMultiplier * params.Atr
+	// check if we have a position and TP and SL levels
+	var tp, sl float64
+	multi := s.Weights.AtrMultiplier * params.Atr
+	if s.CurrentPosition != nil && s.WithSL {
+		if s.CurrentPosition.Type == LONG {
+			sl = s.CurrentPosition.EntryPrice - (multi / 2)
 
-	// 	if s.CurrentPosition.Type == LONG {
-	// 		// tp = s.CurrentPosition.EntryPrice + multi
-	// 		sl = s.CurrentPosition.EntryPrice - (multi / 2)
+			if params.Snapshot.Low <= sl {
+				s.CurrentPosition = nil
+				return Close
+			}
+		} else if s.CurrentPosition.Type == SHORT {
+			sl = s.CurrentPosition.EntryPrice + (multi / 2)
 
-	// 		if params.Snapshot.Low <= sl {
-	// 			// if params.Snapshot.High >= tp || params.Snapshot.Low <= sl {
-	// 			s.CurrentPosition = nil
-	// 			return Close
-	// 		}
-	// 	} else if s.CurrentPosition.Type == SHORT {
-	// 		// tp = s.CurrentPosition.EntryPrice - multi
-	// 		sl = s.CurrentPosition.EntryPrice + (multi / 2)
+			if params.Snapshot.High >= sl {
+				s.CurrentPosition = nil
+				return Close
+			}
+		}
+	}
 
-	// 		if params.Snapshot.High >= sl {
-	// 			// if params.Snapshot.Low <= tp || params.Snapshot.High >= sl {
-	// 			s.CurrentPosition = nil
-	// 			return Close
-	// 		}
-	// 	}
-	// }
+	if s.CurrentPosition != nil && s.WithTP {
+		if s.CurrentPosition.Type == LONG {
+			tp = s.CurrentPosition.EntryPrice + multi
+
+			if params.Snapshot.High >= tp {
+				s.CurrentPosition = nil
+				return Close
+			}
+		} else if s.CurrentPosition.Type == SHORT {
+			tp = s.CurrentPosition.EntryPrice - multi
+
+			if params.Snapshot.Low <= tp {
+				s.CurrentPosition = nil
+				return Close
+			}
+		}
+	}
 
 	// EMA Crossover Logic
 	if params.Ema5 > params.Ema20 {
