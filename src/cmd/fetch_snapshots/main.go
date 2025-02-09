@@ -17,6 +17,7 @@ func main() {
 	user := flag.String("user", "postgres", "Database user")
 	password := flag.String("password", "postgres", "Database password")
 	dbname := flag.String("dbname", "spotter", "Database name")
+	count := flag.Int("count", 20, "Number of symbols to fetch")
 	flag.Parse()
 
 	db, err := repositories.ConnectDB(*host, *port, *user, *password, *dbname)
@@ -25,7 +26,7 @@ func main() {
 	}
 	defer db.Close()
 
-	s, err := ingestors.GetSymbols(20)
+	s, err := ingestors.GetSymbols(*count)
 	if err != nil {
 		log.Fatalf("Error fetching symbols: %v\n", err)
 	}

@@ -125,6 +125,7 @@ func (s *Scalping) decide(params StrategyParams) strategy.Action {
 	rsiOverbought := 70.0
 	rsiOversold := 30.0
 	macdThreshold := 0.5
+	// maxStrength := s.Weights.SuperTrendWeight + s.Weights.BollingerWeight + s.Weights.EmaWeight + s.Weights.RsiWeight + s.Weights.MacdWeight
 
 	// check if we have a position and TP and SL levels
 	var tp, sl float64
@@ -206,8 +207,9 @@ func (s *Scalping) decide(params StrategyParams) strategy.Action {
 	}
 
 	// Decision Logic
-	// log.Printf("Signal Strength: %.2f", signalStrength)
 	if signalStrength > s.Weights.StrengthThreshold {
+		// log.Printf("Signal Strength: %.2f, confidence: %.2f", signalStrength, signalStrength/maxStrength)
+
 		if s.CurrentPosition != nil && s.CurrentPosition.Type == SHORT {
 			s.CurrentPosition = nil
 			return Close
@@ -221,6 +223,8 @@ func (s *Scalping) decide(params StrategyParams) strategy.Action {
 
 		return strategy.Buy
 	} else if signalStrength < -s.Weights.StrengthThreshold {
+		// log.Printf("Signal Strength: %.2f, confidence: %.2f", signalStrength, signalStrength/maxStrength)
+
 		if s.CurrentPosition != nil && s.CurrentPosition.Type == LONG {
 			s.CurrentPosition = nil
 			return Close
@@ -389,6 +393,7 @@ func (s Scalping) ComputeWithOutcome(c <-chan *asset.Snapshot, withLog bool) (<-
 		close := ss.Close
 		minutes++
 
+		// record high and low of the current position
 		if position != FLAT {
 			if ss.High > high {
 				high = ss.High
@@ -418,8 +423,8 @@ func (s Scalping) ComputeWithOutcome(c <-chan *asset.Snapshot, withLog bool) (<-
 			}
 		} else if position == LONG && action == Close {
 			if withLog {
-				log.Printf("Long position closed. entry: %.2f, exit: %.2f, diff: %.2f, minutes %d, high: %.2f, low: %.2f", entryPrice, close, close-entryPrice, minutes, high, low)
 				totalDiff += close - entryPrice
+				log.Printf("Long position closed. entry: %.2f, exit: %.2f, diff: %.2f, minutes %d, high: %.2f, low: %.2f, total diff: %.2f", entryPrice, close, close-entryPrice, minutes, high, low, totalDiff)
 			}
 			position = FLAT
 			balance = shares * close
@@ -430,8 +435,8 @@ func (s Scalping) ComputeWithOutcome(c <-chan *asset.Snapshot, withLog bool) (<-
 			shares = entryShares * (entryPrice + diff) / close
 
 			if withLog {
-				log.Printf("Short position closed. entry: %.2f, exit: %.2f, diff: %.2f, minutes %d, high: %.2f, low: %.2f", entryPrice, close, diff, minutes, high, low)
 				totalDiff += diff
+				log.Printf("Short position closed. entry: %.2f, exit: %.2f, diff: %.2f, minutes %d, high: %.2f, low: %.2f, total diff: %.2f", entryPrice, close, diff, minutes, high, low, totalDiff)
 			}
 
 			position = FLAT
