@@ -1,7 +1,11 @@
 package ingestors
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -19,7 +23,9 @@ const TESTNET = "https://testnet.binancefuture.com"
 
 type BinanceIngestor struct {
 	Ingestor
-	Url string
+	Url    string
+	Key    string
+	Secret string
 }
 
 func (i *BinanceIngestor) Poll() ([]PollData, error) {
@@ -263,4 +269,68 @@ func (i *BinanceIngestor) getLastPrice(symbol string) (float64, error) {
 	}
 
 	return p, nil
+}
+
+func (BinanceIngestor) generateHMAC(message, secretKey string) string {
+	// Create a new HMAC using SHA256
+	h := hmac.New(sha256.New, []byte(secretKey))
+
+	// Write message to the HMAC hash
+	h.Write([]byte(message))
+
+	// Compute final hash and return it as a hexadecimal string
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func (i *BinanceIngestor) GetBalance() (float64, error) {
+	baseUrl := i.Url + "/fapi/v3/balance"
+	u, err := url.Parse(baseUrl)
+	if err != nil {
+		return 0, err
+	}
+
+	q := u.Query()
+	q.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	u.RawQuery = q.Encode()
+	signature := i.generateHMAC(u.RawQuery, i.Secret)
+	u.RawQuery += "&signature=" + signature
+
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		fmt.Println("Error creating request:", err)
+		return 0, err
+	}
+
+	req.Header.Set("X-MBX-APIKEY", i.Key)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error making request:", err)
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, err
+	}
+
+	var raw []interface{}
+	err = json.Unmarshal(body, &raw)
+	if err != nil {
+		return 0, err
+	}
+
+	for _, data := range raw {
+		d := data.(map[string]interface{})
+		if d["asset"].(string) == "USDT" {
+			balance, err := strconv.ParseFloat(d["balance"].(string), 64)
+			if err != nil {
+				return 0, err
+			}
+			return balance, nil
+		}
+	}
+
+	return 0, nil
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/cinar/indicator/v2/helper"
 	"pivetta.se/crypro-spotter/src/ingestors"
@@ -9,7 +10,24 @@ import (
 )
 
 func main() {
-	liveRun()
+	apiKey := os.Getenv("API_KEY")
+	apiSecret := os.Getenv("API_SECRET")
+
+	if apiKey == "" || apiSecret == "" {
+		log.Fatalf("API_KEY and API_SECRET must be set")
+	}
+
+	bi := ingestors.BinanceIngestor{
+		Url:    ingestors.TESTNET,
+		Key:    apiKey,
+		Secret: apiSecret,
+	}
+
+	b, err := bi.GetBalance()
+	if err != nil {
+		log.Fatalf("Error getting balance: %v", err)
+	}
+	log.Printf("Balance: %v", b)
 }
 
 func liveRun() {
