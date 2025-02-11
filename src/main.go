@@ -13,7 +13,10 @@ func main() {
 }
 
 func liveRun() {
-	bd, err := ingestors.BinancePoller()
+	bi := ingestors.BinanceIngestor{
+		Url: ingestors.LIVE,
+	}
+	bd, err := bi.Poll()
 	if err != nil {
 		log.Fatalf("Error polling Binance: %v", err)
 	}

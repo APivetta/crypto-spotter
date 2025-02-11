@@ -26,18 +26,22 @@ func main() {
 	}
 	defer db.Close()
 
-	s, err := ingestors.GetSymbols(*count)
+	bi := ingestors.BinanceIngestor{
+		Url: ingestors.LIVE,
+	}
+
+	s, err := bi.GetSymbols(*count)
 	if err != nil {
 		log.Fatalf("Error fetching symbols: %v\n", err)
 	}
 
 	for _, symbol := range s {
 		fmt.Printf("Fetching Symbol: %s\n", symbol)
-		fetchSnapshots(db, symbol)
+		fetchSnapshots(db, symbol, bi)
 	}
 }
 
-func fetchSnapshots(db *sql.DB, symbol string) {
+func fetchSnapshots(db *sql.DB, symbol string, bi ingestors.BinanceIngestor) {
 	recentSnapshot, err := repositories.GetLatestSnapshot(db, symbol)
 	if err != nil {
 		log.Fatalf("Error fetching most recent snapshot: %v\n", err)
@@ -54,6 +58,6 @@ func fetchSnapshots(db *sql.DB, symbol string) {
 		log.Printf("Fetching snapshots since %v\n", date)
 	}
 
-	ss := ingestors.GetHistory(symbol, date)
+	ss := bi.GetHistory(symbol, date)
 	repositories.InsertSnapshots(db, symbol, ss)
 }

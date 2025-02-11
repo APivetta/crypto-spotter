@@ -12,45 +12,45 @@ import (
 	"github.com/cinar/indicator/v2/asset"
 )
 
-type BinanceData struct {
-	Symbol      string
-	Klines      chan *asset.Snapshot
-	LastPrice   chan float64
-	LastFetched time.Time
-}
-
 const KLINE_LIMIT = "300"
 const KLINE_INTERVAL = "1m"
+const LIVE = "https://fapi.binance.com"
+const TESTNET = "https://testnet.binancefuture.com"
 
-func BinancePoller() ([]BinanceData, error) {
-	symbols, err := GetSymbols(1)
+type BinanceIngestor struct {
+	Ingestor
+	Url string
+}
+
+func (i *BinanceIngestor) Poll() ([]PollData, error) {
+	symbols, err := i.GetSymbols(1)
 	if err != nil {
 		return nil, err
 	}
 
-	var data []BinanceData
+	var data []PollData
 
 	for _, symbol := range symbols {
-		data = append(data, BinanceData{
+		data = append(data, PollData{
 			Symbol:    symbol,
 			Klines:    make(chan *asset.Snapshot),
 			LastPrice: make(chan float64),
 		})
 	}
 
-	pollKlines(data)
-	pollLastPrice(data)
+	i.pollKlines(data)
+	i.pollLastPrice(data)
 
 	return data, nil
 }
 
-func GetHistory(symbol string, from time.Time) chan *asset.Snapshot {
+func (i *BinanceIngestor) GetHistory(symbol string, from time.Time) chan *asset.Snapshot {
 	res := make(chan *asset.Snapshot)
 	f := from
 
 	go func() {
 		for {
-			klines, err := getKlines(symbol, f)
+			klines, err := i.getKlines(symbol, f)
 			if err != nil {
 				log.Printf("Error getting klines: %v", err)
 				close(res)
@@ -72,9 +72,9 @@ func GetHistory(symbol string, from time.Time) chan *asset.Snapshot {
 	return res
 }
 
-func GetSymbols(count int) ([]string, error) {
+func (i *BinanceIngestor) GetSymbols(count int) ([]string, error) {
 	result := []string{}
-	resp, err := http.Get("https://fapi.binance.com/fapi/v1/exchangeInfo")
+	resp, err := http.Get(i.Url + "/fapi/v1/exchangeInfo")
 	if err != nil {
 		return nil, err
 	}
@@ -103,11 +103,11 @@ func GetSymbols(count int) ([]string, error) {
 	return result, nil
 }
 
-func pollKlines(data []BinanceData) {
+func (i *BinanceIngestor) pollKlines(data []PollData) {
 	for _, d := range data {
-		go func(d BinanceData) {
+		go func(d PollData) {
 			for {
-				klines, err := getKlines(d.Symbol, d.LastFetched)
+				klines, err := i.getKlines(d.Symbol, d.LastFetched)
 				if err != nil {
 					return
 				}
@@ -128,11 +128,11 @@ func pollKlines(data []BinanceData) {
 		}(d)
 	}
 }
-func pollLastPrice(data []BinanceData) {
+func (i *BinanceIngestor) pollLastPrice(data []PollData) {
 	for _, d := range data {
-		go func(d BinanceData) {
+		go func(d PollData) {
 			for {
-				p, err := getLastPrice(d.Symbol)
+				p, err := i.getLastPrice(d.Symbol)
 				if err != nil {
 					return
 				}
@@ -144,9 +144,9 @@ func pollLastPrice(data []BinanceData) {
 	}
 }
 
-func getKlines(symbol string, from time.Time) ([]asset.Snapshot, error) {
+func (i *BinanceIngestor) getKlines(symbol string, from time.Time) ([]asset.Snapshot, error) {
 	var result []asset.Snapshot
-	baseUrl := "https://fapi.binance.com/fapi/v1/klines"
+	baseUrl := i.Url + "/fapi/v1/klines"
 	u, err := url.Parse(baseUrl)
 	if err != nil {
 		return nil, err
@@ -228,8 +228,8 @@ func getKlines(symbol string, from time.Time) ([]asset.Snapshot, error) {
 	return result, nil
 }
 
-func getLastPrice(symbol string) (float64, error) {
-	baseUrl := "https://fapi.binance.com/fapi/v2/ticker/price"
+func (i *BinanceIngestor) getLastPrice(symbol string) (float64, error) {
+	baseUrl := i.Url + "/fapi/v2/ticker/price"
 	u, err := url.Parse(baseUrl)
 	if err != nil {
 		return 0, err
