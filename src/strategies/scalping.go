@@ -53,13 +53,13 @@ type Indicators struct {
 }
 
 type StrategyWeights struct {
-	SuperTrendWeight  float64
-	BollingerWeight   float64
-	EmaWeight         float64
-	RsiWeight         float64
-	MacdWeight        float64
-	StrengthThreshold float64
-	AtrMultiplier     float64
+	SuperTrendWeight  float64 `json:"superTrendWeight"`
+	BollingerWeight   float64 `json:"bollingerWeight"`
+	EmaWeight         float64 `json:"emaWeight"`
+	RsiWeight         float64 `json:"rsiWeight"`
+	MacdWeight        float64 `json:"macdWeight"`
+	StrengthThreshold float64 `json:"strengthThreshold"`
+	AtrMultiplier     float64 `json:"atrMultiplier"`
 }
 
 type StrategyParams struct {
@@ -324,7 +324,7 @@ func (s Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Acti
 
 			// one time stabilization to let all indicators catch up before syncing
 			if !stable && i >= s.Stabilization {
-				time.Sleep(1 * time.Second)
+				time.Sleep(500 * time.Millisecond)
 				stable = true
 			}
 
@@ -375,9 +375,6 @@ func (s Scalping) ComputeWithOutcome(c <-chan *asset.Snapshot, withLog bool) (<-
 	low := 0.0
 	position := FLAT
 	entryPrice := 0.0
-	entryShares := 0.0
-	balance := 1.0
-	shares := 0.0
 	totalDiff := 0.0
 	minutes := 0
 
@@ -410,41 +407,32 @@ func (s Scalping) ComputeWithOutcome(c <-chan *asset.Snapshot, withLog bool) (<-
 				entryPrice = close
 				high = close
 				low = close
-				shares = balance / close
 				minutes = 0
 			} else if action == strategy.Sell {
 				position = SHORT
 				entryPrice = close
 				high = close
 				low = close
-				shares = balance / close
-				entryShares = shares
 				minutes = 0
 			}
 		} else if position == LONG && action == Close {
-			if withLog {
-				totalDiff += close - entryPrice
-				log.Printf("Long position closed. entry: %.2f, exit: %.2f, diff: %.2f, minutes %d, high: %.2f, low: %.2f, total diff: %.2f", entryPrice, close, close-entryPrice, minutes, high, low, totalDiff)
-			}
+			diff := close - entryPrice
+			totalDiff += diff
 			position = FLAT
-			balance = shares * close
-			shares = 0
+			if withLog {
+				log.Printf("Long position closed. entry: %.2f, exit: %.2f, diff: %.2f, minutes %d, high: %.2f, low: %.2f, total diff: %.2f", entryPrice, close, diff, minutes, high, low, totalDiff)
+			}
 
 		} else if position == SHORT && action == Close {
 			diff := entryPrice - close
-			shares = entryShares * (entryPrice + diff) / close
-
+			totalDiff += diff
+			position = FLAT
 			if withLog {
-				totalDiff += diff
 				log.Printf("Short position closed. entry: %.2f, exit: %.2f, diff: %.2f, minutes %d, high: %.2f, low: %.2f, total diff: %.2f", entryPrice, close, diff, minutes, high, low, totalDiff)
 			}
-
-			position = FLAT
-			shares = 0
-			entryShares = 0
 		}
 
-		return balance + (shares * float64(close)) - 1.0
+		return totalDiff
 	})
 
 	return actions[0], outcomes

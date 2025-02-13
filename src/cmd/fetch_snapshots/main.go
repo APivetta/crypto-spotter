@@ -9,22 +9,14 @@ import (
 
 	"pivetta.se/crypro-spotter/src/ingestors"
 	"pivetta.se/crypro-spotter/src/repositories"
+	"pivetta.se/crypro-spotter/src/utils"
 )
 
 func main() {
-	host := flag.String("host", "localhost", "Database host")
-	port := flag.Int("port", 5433, "Database port")
-	user := flag.String("user", "postgres", "Database user")
-	password := flag.String("password", "postgres", "Database password")
-	dbname := flag.String("dbname", "spotter", "Database name")
 	count := flag.Int("count", 20, "Number of symbols to fetch")
 	flag.Parse()
 
-	db, err := repositories.ConnectDB(*host, *port, *user, *password, *dbname)
-	if err != nil {
-		log.Fatalf("connectDB: %v\n", err)
-	}
-	defer db.Close()
+	db := utils.GetDb()
 
 	bi := ingestors.BinanceIngestor{
 		Url: ingestors.LIVE,

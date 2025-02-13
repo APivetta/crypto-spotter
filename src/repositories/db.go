@@ -2,7 +2,6 @@ package repositories
 
 import (
 	"database/sql"
-	"flag"
 	"fmt"
 	"log"
 	"time"
@@ -10,29 +9,8 @@ import (
 	"github.com/cinar/indicator/v2/asset"
 	"github.com/cinar/indicator/v2/helper"
 	_ "github.com/lib/pq"
+	"pivetta.se/crypro-spotter/src/utils"
 )
-
-func ConnectDB(host string, port int, user, password, dbname string) (*sql.DB, error) {
-	// Build connection string
-	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		host, port, user, password, dbname)
-
-	log.Printf("Connecting to database: %s\n", psqlInfo)
-
-	// Connect to the database
-	db, err := sql.Open("postgres", psqlInfo)
-	if err != nil {
-		return nil, fmt.Errorf("connectDB: %w", err)
-	}
-
-	// Verify connection
-	err = db.Ping()
-	if err != nil {
-		return nil, fmt.Errorf("connectDB: %w", err)
-	}
-
-	return db, nil
-}
 
 func GetLatestSnapshot(db *sql.DB, a string) (*asset.Snapshot, error) {
 	query := `SELECT date, open, high, low, close, volume FROM snapshots WHERE asset = $1 ORDER BY date DESC LIMIT 1`
@@ -116,30 +94,18 @@ func Cleanup(db *sql.DB, a string) error {
 }
 
 func NewDBRepository(a string, limit int) (asset.Repository, error) {
-	host := flag.String("host", "localhost", "Database host")
-	port := flag.Int("port", 5433, "Database port")
-	user := flag.String("user", "postgres", "Database user")
-	password := flag.String("password", "postgres", "Database password")
-	dbname := flag.String("dbname", "spotter", "Database name")
-	flag.Parse()
-
-	db, err := ConnectDB(*host, *port, *user, *password, *dbname)
-	if err != nil {
-		return nil, fmt.Errorf("connectDB: %w", err)
-	}
-	defer db.Close()
-
+	db := utils.GetDb()
 	repo := asset.NewInMemoryRepository()
 
 	ss, err := GetSnapshots(db, a, limit)
 	if err != nil {
-		return nil, fmt.Errorf("Error fetching snapshots: %w", err)
+		return nil, fmt.Errorf("error fetching snapshots: %w", err)
 	}
 
 	sschan := helper.SliceToChan(ss)
 	err = repo.Append(a, sschan)
 	if err != nil {
-		return nil, fmt.Errorf("Error appending snapshots: %w", err)
+		return nil, fmt.Errorf("error appending snapshots: %w", err)
 	}
 
 	return repo, nil

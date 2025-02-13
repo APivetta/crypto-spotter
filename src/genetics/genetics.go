@@ -14,7 +14,7 @@ import (
 
 const (
 	PopulationSize = 100
-	Generations    = 50
+	Generations    = 5
 	MutationRate   = 0.2
 )
 
@@ -132,20 +132,19 @@ func FitnessFunction(weights strategies.StrategyWeights, assets <-chan *asset.Sn
 		outcome = o
 	}
 
-	// log.Printf("Outcome: %v", outcome)
 	return Score{
 		Value:      outcome,
 		Individual: weights,
 	}
 }
 
-func RunGenetic(repo asset.Repository, a string) error {
-	log.Println("Running Genetic Algorithm")
+func RunGenetic(repo asset.Repository, a string) (*strategies.StrategyWeights, error) {
 	// Initialize population
 	population := make([]strategies.StrategyWeights, PopulationSize)
 	for i := range population {
 		population[i] = GenerateRandomWeights()
 	}
+	var best *strategies.StrategyWeights
 
 	// Genetic Algorithm
 	for gen := 0; gen < Generations; gen++ {
@@ -153,10 +152,9 @@ func RunGenetic(repo asset.Repository, a string) error {
 		wg.Add(PopulationSize)
 		fitnessScores := make([]Score, PopulationSize)
 
-		log.Printf("Generation %d\n", gen)
 		snapshots, err := repo.Get(a)
 		if err != nil {
-			return fmt.Errorf("Error getting BTC data: %v", err)
+			return nil, fmt.Errorf("error getting BTC data: %v", err)
 		}
 		ss := helper.Duplicate(snapshots, PopulationSize)
 
@@ -180,15 +178,14 @@ func RunGenetic(repo asset.Repository, a string) error {
 			return 0
 		})
 
+		best = &fitnessScores[0].Individual
+		log.Printf("Generation %d: Best Individual: %+v, Fitness: %.4f\n", gen, *best, fitnessScores[0].Value)
+
 		// Replace old population with new one
 		population = generateNewPop(fitnessScores)
 	}
 
-	// // Final output
-	// bestIndividual := SelectBest(population, fitnessScoresdcv )
-	// fmt.Printf("Best Strategy Weights: %+v\n", bestIndividual)
-
-	return nil
+	return best, nil
 }
 
 func generateNewPop(fitnessScores []Score) []strategies.StrategyWeights {
@@ -196,7 +193,7 @@ func generateNewPop(fitnessScores []Score) []strategies.StrategyWeights {
 
 	// Elitism: Print top 5 individuals and add to next gen
 	for i := 0; i < 5; i++ {
-		fmt.Printf("Fitness: %.4f, Weights: %+v\n", fitnessScores[i].Value, fitnessScores[i].Individual)
+		//fmt.Printf("Fitness: %.4f, Weights: %+v\n", fitnessScores[i].Value, fitnessScores[i].Individual)
 		newPopulation[i] = fitnessScores[i].Individual
 	}
 
