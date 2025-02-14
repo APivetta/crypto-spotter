@@ -14,7 +14,7 @@ import (
 
 const (
 	PopulationSize = 100
-	Generations    = 5
+	Generations    = 50
 	MutationRate   = 0.2
 )
 
@@ -124,6 +124,7 @@ func FitnessFunction(weights strategies.StrategyWeights, assets <-chan *asset.Sn
 	scalp := strategies.Scalping{
 		Weights:       weights,
 		Stabilization: 100,
+		WithSL:        true,
 	}
 
 	ac, oc := scalp.ComputeWithOutcome(assets, false)

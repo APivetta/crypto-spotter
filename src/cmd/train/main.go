@@ -14,8 +14,8 @@ import (
 )
 
 func main() {
-	days := flag.Int("days", 3, "Days to backtest")
-	asset := flag.String("asset", "BTCUSDT", "Asset to backtest")
+	days := flag.Int("days", 3, "Days to train")
+	asset := flag.String("asset", "BTCUSDT", "Asset to train")
 	flag.Parse()
 
 	geneticsRun(*days, *asset)

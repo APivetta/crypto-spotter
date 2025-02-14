@@ -368,7 +368,7 @@ func (s Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Acti
 }
 
 func (s Scalping) ComputeWithOutcome(c <-chan *asset.Snapshot, withLog bool) (<-chan strategy.Action, <-chan float64) {
-	snapshots := helper.Duplicate(c, 3)
+	snapshots := helper.Duplicate(c, 2)
 	actions := helper.Duplicate(s.Compute(snapshots[0]), 2)
 
 	high := 0.0
@@ -377,14 +377,6 @@ func (s Scalping) ComputeWithOutcome(c <-chan *asset.Snapshot, withLog bool) (<-
 	entryPrice := 0.0
 	totalDiff := 0.0
 	minutes := 0
-
-	go func() {
-		for range snapshots[2] {
-		}
-		if withLog {
-			log.Printf("Total Diff: %.2f", totalDiff)
-		}
-	}()
 
 	outcomes := helper.Operate(snapshots[1], actions[1], func(ss *asset.Snapshot, action strategy.Action) float64 {
 		close := ss.Close

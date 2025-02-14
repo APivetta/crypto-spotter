@@ -1,12 +1,15 @@
 package main
 
 import (
+	"database/sql"
+	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
-	"time"
 
 	"pivetta.se/crypro-spotter/src/repositories"
 	"pivetta.se/crypro-spotter/src/strategies"
+	"pivetta.se/crypro-spotter/src/utils"
 )
 
 func main() {
@@ -24,24 +27,13 @@ func backtestRun(days int, asset string) {
 		log.Fatalf("Error creating repository: %v", err)
 	}
 
-	// TODO: read weights from file
+	w, err := getWeights(asset)
+	if err != nil {
+		log.Fatalf("Error getting weights: %v", err)
+	}
+
 	scalp := strategies.Scalping{
-		Weights: strategies.StrategyWeights{
-			// SuperTrendWeight:  0.26982423289769386,
-			// BollingerWeight:   0.10180437138661834,
-			// EmaWeight:         0.5024262049861916,
-			// RsiWeight:         2.9068689490984467,
-			// MacdWeight:        0.6119196362815509,
-			// StrengthThreshold: 0.9852577989940008,
-			// AtrMultiplier:     3.3836230562644802,
-			SuperTrendWeight:  0.09757534157306982,
-			BollingerWeight:   2.297643212734978,
-			EmaWeight:         0.20797171496165825,
-			RsiWeight:         1.2438732022732464,
-			MacdWeight:        0.09309921828877975,
-			StrengthThreshold: 2.6881009994704934,
-			AtrMultiplier:     2.6788428493513603,
-		},
+		Weights:       *w,
 		Stabilization: 100,
 		WithSL:        true,
 	}
@@ -51,11 +43,37 @@ func backtestRun(days int, asset string) {
 		log.Fatalf("Error getting BTC data: %v", err)
 	}
 
-	ac, outcome := scalp.ComputeWithOutcome(r, true)
-
-	for range outcome {
+	ac, oc := scalp.ComputeWithOutcome(r, true)
+	var outcome float64
+	for o := range oc {
 		<-ac
+		outcome = o
 	}
 
-	time.Sleep(1 * time.Second)
+	fmt.Printf("Outcome: %f\n", outcome)
+}
+
+func getWeights(a string) (*strategies.StrategyWeights, error) {
+	db := utils.GetDb()
+
+	var rawJson string
+	var weights *strategies.StrategyWeights
+	query := `SELECT genome FROM genomes WHERE asset = $1 ORDER BY date DESC LIMIT 1`
+	row := db.QueryRow(query, a)
+	err := row.Scan(&rawJson)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("getWeights: %w", err)
+	}
+
+	fmt.Println(rawJson)
+
+	err = json.Unmarshal([]byte(rawJson), &weights)
+	if err != nil {
+		return nil, fmt.Errorf("getWeights, unmarshal: %w", err)
+	}
+
+	return weights, nil
 }
