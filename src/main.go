@@ -1,15 +1,20 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"os"
 
 	"github.com/cinar/indicator/v2/helper"
+	"github.com/cinar/indicator/v2/strategy"
 	"pivetta.se/crypro-spotter/src/ingestors"
 	"pivetta.se/crypro-spotter/src/strategies"
+	"pivetta.se/crypro-spotter/src/utils"
 )
 
 func main() {
+	asset := flag.String("asset", "BTCUSDT", "Asset to backtest")
+	flag.Parse()
 	apiKey := os.Getenv("API_KEY")
 	apiSecret := os.Getenv("API_SECRET")
 
@@ -23,40 +28,50 @@ func main() {
 		Secret: apiSecret,
 	}
 
-	b, err := bi.GetBalance()
-	if err != nil {
-		log.Fatalf("Error getting balance: %v", err)
-	}
-	log.Printf("Balance: %v", b)
+	liveRun(bi, *asset)
+	// b, err := bi.GetBalance()
+	// if err != nil {
+	// 	log.Fatalf("Error getting balance: %v", err)
+	// }
+	// log.Printf("Balance: %v", b)
 }
 
-func liveRun() {
-	bi := ingestors.BinanceIngestor{
-		Url: ingestors.LIVE,
-	}
-	bd, err := bi.Poll()
+func liveRun(bi ingestors.BinanceIngestor, asset string) {
+	bd, err := bi.Poll(asset)
 	if err != nil {
 		log.Fatalf("Error polling Binance: %v", err)
 	}
 
-	btc := bd[0]
-
-	scalp := strategies.Scalping{
-		Weights: strategies.StrategyWeights{
-			SuperTrendWeight:  0.11305080149086622,
-			BollingerWeight:   2.5045589544222526,
-			EmaWeight:         0.029109615148465218,
-			RsiWeight:         2.5698574046573275,
-			MacdWeight:        1.284617282123353,
-			StrengthThreshold: 3.5556241277450615,
-			AtrMultiplier:     2.740351814448069,
-		},
-		Stabilization: 100,
+	w, err := utils.GetLatestWeights("BTCUSDT")
+	if err != nil {
+		log.Fatalf("Error getting weights: %v", err)
 	}
 
-	ac := scalp.Compute(helper.Buffered(btc.Klines, 50))
+	scalp := strategies.Scalping{
+		Weights:       *w,
+		Stabilization: 299,
+		WithSL:        true,
+	}
+
+	ac := scalp.Compute(helper.Buffered(bd.Klines, 50))
 
 	for a := range ac {
-		log.Printf("Action: %v", a.Annotation())
+		log.Printf("Action: %v", ExtendedAnnotation(a))
+	}
+}
+
+func ExtendedAnnotation(a strategy.Action) string {
+	switch a {
+	case strategy.Sell:
+		return "SHORT"
+
+	case strategy.Buy:
+		return "LONG"
+
+	case strategies.Close:
+		return "CLOSE"
+
+	default:
+		return ""
 	}
 }

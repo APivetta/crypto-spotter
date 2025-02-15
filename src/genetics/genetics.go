@@ -123,7 +123,7 @@ func FitnessFunction(weights strategies.StrategyWeights, assets <-chan *asset.Sn
 	var outcome float64
 	scalp := strategies.Scalping{
 		Weights:       weights,
-		Stabilization: 100,
+		Stabilization: 60,
 		WithSL:        true,
 	}
 
@@ -139,13 +139,13 @@ func FitnessFunction(weights strategies.StrategyWeights, assets <-chan *asset.Sn
 	}
 }
 
-func RunGenetic(repo asset.Repository, a string) (*strategies.StrategyWeights, error) {
+func RunGenetic(repo asset.Repository, a string) (*Score, error) {
 	// Initialize population
 	population := make([]strategies.StrategyWeights, PopulationSize)
 	for i := range population {
 		population[i] = GenerateRandomWeights()
 	}
-	var best *strategies.StrategyWeights
+	var best *Score
 
 	// Genetic Algorithm
 	for gen := 0; gen < Generations; gen++ {
@@ -179,7 +179,7 @@ func RunGenetic(repo asset.Repository, a string) (*strategies.StrategyWeights, e
 			return 0
 		})
 
-		best = &fitnessScores[0].Individual
+		best = &fitnessScores[0]
 		log.Printf("Generation %d: Best Individual: %+v, Fitness: %.4f\n", gen, *best, fitnessScores[0].Value)
 
 		// Replace old population with new one

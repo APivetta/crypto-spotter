@@ -10,7 +10,6 @@ import (
 	"pivetta.se/crypro-spotter/src/genetics"
 	"pivetta.se/crypro-spotter/src/ingestors"
 	"pivetta.se/crypro-spotter/src/repositories"
-	"pivetta.se/crypro-spotter/src/strategies"
 	"pivetta.se/crypro-spotter/src/utils"
 )
 
@@ -37,7 +36,7 @@ func main() {
 
 func geneticsRun(days int, asset string) {
 	historyMinutes := 24 * 60 * days
-	repo, err := repositories.NewDBRepository(asset, historyMinutes)
+	repo, err := repositories.NewDBRepository(asset, historyMinutes+60)
 	if err != nil {
 		log.Fatalf("Error creating repository: %v", err)
 	}
@@ -54,17 +53,17 @@ func geneticsRun(days int, asset string) {
 	}
 }
 
-func storeWeights(a string, weights *strategies.StrategyWeights) error {
+func storeWeights(a string, best *genetics.Score) error {
 	db := utils.GetDb()
 
-	jsonData, err := json.Marshal(weights)
+	jsonData, err := json.Marshal(best.Individual)
 	if err != nil {
 		return err
 	}
 	genome := string(jsonData) // Store JSON as string in DB
 
-	query := `INSERT INTO genomes (asset, date, genome) VALUES ($1, $2, $3)`
-	_, err = db.Exec(query, a, time.Now(), genome)
+	query := `INSERT INTO genomes (asset, date, genome, fitness) VALUES ($1, $2, $3, $4)`
+	_, err = db.Exec(query, a, time.Now(), genome, best.Value)
 	if err != nil {
 		return fmt.Errorf("insertSnapshots: %w", err)
 	}

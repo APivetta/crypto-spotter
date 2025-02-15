@@ -331,6 +331,7 @@ func (s Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Acti
 			if !stable && i >= s.Stabilization {
 				time.Sleep(500 * time.Millisecond)
 				stable = true
+				// fmt.Println("Stabilized")
 			}
 
 			if i >= s.Stabilization {

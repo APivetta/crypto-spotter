@@ -2,10 +2,15 @@ package utils
 
 import (
 	"database/sql"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"sync"
+
+	_ "github.com/lib/pq"
+
+	"pivetta.se/crypro-spotter/src/strategies"
 )
 
 var db *sql.DB
@@ -49,4 +54,29 @@ func connectDB(host string, port int, user, password, dbname string) (*sql.DB, e
 	}
 
 	return db, nil
+}
+
+func GetLatestWeights(a string) (*strategies.StrategyWeights, error) {
+	db := GetDb()
+
+	var rawJson string
+	var weights *strategies.StrategyWeights
+	query := `SELECT genome FROM genomes WHERE asset = $1 ORDER BY date DESC LIMIT 1`
+	row := db.QueryRow(query, a)
+	err := row.Scan(&rawJson)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("getWeights: %w", err)
+	}
+
+	fmt.Println(rawJson)
+
+	err = json.Unmarshal([]byte(rawJson), &weights)
+	if err != nil {
+		return nil, fmt.Errorf("getWeights, unmarshal: %w", err)
+	}
+
+	return weights, nil
 }

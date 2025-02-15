@@ -28,26 +28,19 @@ type BinanceIngestor struct {
 	Secret string
 }
 
-func (i *BinanceIngestor) Poll() ([]PollData, error) {
-	symbols, err := i.GetSymbols(1)
-	if err != nil {
-		return nil, err
-	}
-
+// used to poll many symbols at once, might be useful in the future to use slices of PollData in internal functions
+func (i *BinanceIngestor) Poll(symbol string) (PollData, error) {
 	var data []PollData
-
-	for _, symbol := range symbols {
-		data = append(data, PollData{
-			Symbol:    symbol,
-			Klines:    make(chan *asset.Snapshot),
-			LastPrice: make(chan float64),
-		})
-	}
+	data = append(data, PollData{
+		Symbol:    symbol,
+		Klines:    make(chan *asset.Snapshot),
+		LastPrice: make(chan float64),
+	})
 
 	i.pollKlines(data)
 	i.pollLastPrice(data)
 
-	return data, nil
+	return data[0], nil
 }
 
 func (i *BinanceIngestor) GetHistory(symbol string, from time.Time) chan *asset.Snapshot {
