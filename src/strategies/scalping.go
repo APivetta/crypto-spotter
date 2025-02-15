@@ -322,9 +322,9 @@ func (s Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Acti
 
 	go func() {
 		i := 0
-		for asset := range snapshots {
+		for snapshot := range snapshots {
 			// log.Printf("Asset: %v, line %d", asset, i)
-			ss <- asset
+			ss <- snapshot
 			wg.Wait()
 
 			// one time stabilization to let all indicators catch up before syncing
@@ -346,7 +346,7 @@ func (s Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Acti
 				// log.Printf("MACDSignal: %.2f", ms)
 
 				action := s.decide(StrategyParams{
-					Snapshot:   *asset,
+					Snapshot:   *snapshot,
 					SuperTrend: st,
 					UpperBand:  ub,
 					MiddleBand: mb,

@@ -65,7 +65,7 @@ func storeWeights(a string, best *genetics.Score) error {
 	query := `INSERT INTO genomes (asset, date, genome, fitness) VALUES ($1, $2, $3, $4)`
 	_, err = db.Exec(query, a, time.Now(), genome, best.Value)
 	if err != nil {
-		return fmt.Errorf("insertSnapshots: %w", err)
+		return fmt.Errorf("storeWeights: %w", err)
 	}
 
 	return nil
