@@ -23,7 +23,7 @@ func main() {
 	}
 
 	bi := ingestors.BinanceIngestor{
-		Url:    ingestors.TESTNET,
+		Url:    ingestors.LIVE,
 		Key:    apiKey,
 		Secret: apiSecret,
 	}
@@ -53,10 +53,12 @@ func liveRun(bi ingestors.BinanceIngestor, asset string) {
 		WithSL:        true,
 	}
 
-	ac := scalp.Compute(helper.Buffered(bd.Klines, 50))
+	ss := helper.Duplicate(bd.Klines, 2)
+	ac := scalp.Compute(ss[0])
 
 	for a := range ac {
-		log.Printf("Action: %v", ExtendedAnnotation(a))
+		kline := <-ss[1]
+		log.Printf("Action: %v, Price: %.2f", ExtendedAnnotation(a), kline.Close)
 	}
 }
 
@@ -72,6 +74,6 @@ func ExtendedAnnotation(a strategy.Action) string {
 		return "CLOSE"
 
 	default:
-		return ""
+		return "HOLD"
 	}
 }
