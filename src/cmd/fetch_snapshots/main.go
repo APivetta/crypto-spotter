@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	count := flag.Int("count", 20, "Number of symbols to fetch")
+	count := flag.Int("count", 1, "Number of symbols to fetch")
 	flag.Parse()
 
 	db := utils.GetDb()

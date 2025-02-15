@@ -208,37 +208,42 @@ func (s *Scalping) decide(params StrategyParams) strategy.Action {
 
 	// Decision Logic
 	if signalStrength > s.Weights.StrengthThreshold {
-		// log.Printf("Signal Strength: %.2f, confidence: %.2f", signalStrength, signalStrength/maxStrength)
+		if s.CurrentPosition == nil {
+			// log.Printf("Signal Strength: %.2f, confidence: %.2f", signalStrength, signalStrength/maxStrength)
 
-		if s.CurrentPosition != nil && s.CurrentPosition.Type == SHORT {
+			s.CurrentPosition = &Position{
+				Type:       LONG,
+				EntryPrice: params.Snapshot.Close,
+				EntryTime:  params.Snapshot.Date,
+			}
+			return strategy.Buy
+		}
+
+		if s.CurrentPosition.Type == SHORT {
+			// log.Printf("Signal Strength: %.2f, confidence: %.2f", signalStrength, signalStrength/maxStrength)
+
 			s.CurrentPosition = nil
 			return Close
 		}
-
-		s.CurrentPosition = &Position{
-			Type:       LONG,
-			EntryPrice: params.Snapshot.Close,
-			EntryTime:  params.Snapshot.Date,
-		}
-
-		return strategy.Buy
 	} else if signalStrength < -s.Weights.StrengthThreshold {
-		// log.Printf("Signal Strength: %.2f, confidence: %.2f", signalStrength, signalStrength/maxStrength)
 
-		if s.CurrentPosition != nil && s.CurrentPosition.Type == LONG {
+		if s.CurrentPosition == nil {
+			// log.Printf("Signal Strength: %.2f, confidence: %.2f", signalStrength, signalStrength/maxStrength)
+			s.CurrentPosition = &Position{
+				Type:       SHORT,
+				EntryPrice: params.Snapshot.Close,
+				EntryTime:  params.Snapshot.Date,
+			}
+			return strategy.Sell
+		}
+
+		if s.CurrentPosition.Type == LONG {
+			// log.Printf("Signal Strength: %.2f, confidence: %.2f", signalStrength, signalStrength/maxStrength)
 			s.CurrentPosition = nil
 			return Close
 		}
-
-		s.CurrentPosition = &Position{
-			Type:       SHORT,
-			EntryPrice: params.Snapshot.Close,
-			EntryTime:  params.Snapshot.Date,
-		}
-		return strategy.Sell
-	} else {
-		return strategy.Hold
 	}
+	return strategy.Hold
 }
 
 func (s Scalping) Compute(snapshots <-chan *asset.Snapshot) <-chan strategy.Action {

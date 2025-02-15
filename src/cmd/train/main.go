@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"pivetta.se/crypro-spotter/src/genetics"
+	"pivetta.se/crypro-spotter/src/ingestors"
 	"pivetta.se/crypro-spotter/src/repositories"
 	"pivetta.se/crypro-spotter/src/strategies"
 	"pivetta.se/crypro-spotter/src/utils"
@@ -15,10 +16,23 @@ import (
 
 func main() {
 	days := flag.Int("days", 3, "Days to train")
-	asset := flag.String("asset", "BTCUSDT", "Asset to train")
+	count := flag.Int("count", 1, "Number of symbols to train")
 	flag.Parse()
 
-	geneticsRun(*days, *asset)
+	bi := ingestors.BinanceIngestor{
+		Url: ingestors.LIVE,
+	}
+
+	s, err := bi.GetSymbols(*count)
+	if err != nil {
+		log.Fatalf("Error fetching symbols: %v\n", err)
+	}
+
+	for _, symbol := range s {
+		fmt.Printf("Training Symbol: %s\n", symbol)
+		geneticsRun(*days, symbol)
+	}
+
 }
 
 func geneticsRun(days int, asset string) {
