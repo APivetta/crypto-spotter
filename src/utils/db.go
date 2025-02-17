@@ -3,9 +3,10 @@ package utils
 import (
 	"database/sql"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 	"sync"
 
 	_ "github.com/lib/pq"
@@ -18,15 +19,19 @@ var once sync.Once
 
 func GetDb() *sql.DB {
 	once.Do(func() {
-		host := flag.String("host", "localhost", "Database host")
-		port := flag.Int("port", 5433, "Database port")
-		user := flag.String("user", "postgres", "Database user")
-		password := flag.String("password", "postgres", "Database password")
-		dbname := flag.String("dbname", "spotter", "Database name")
-		flag.Parse()
+		host := os.Getenv("POSTGRES_HOST")
+		port := os.Getenv("POSTGRES_PORT")
+		user := os.Getenv("POSTGRES_USER")
+		password := os.Getenv("POSTGRES_PASSWORD")
+		dbname := os.Getenv("POSTGRES_DB")
 
 		var err error
-		db, err = connectDB(*host, *port, *user, *password, *dbname)
+		p, err := strconv.Atoi(port)
+		if err != nil {
+			log.Fatalf("Error converting port to int: %v", err)
+		}
+
+		db, err = connectDB(host, p, user, password, dbname)
 		if err != nil {
 			log.Fatalf("Error connecting to database: %v", err)
 		}

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/cinar/indicator/v2/helper"
@@ -14,8 +16,22 @@ import (
 	"pivetta.se/crypro-spotter/src/utils"
 )
 
+var outcome float64
+var asset *string
+
 func main() {
-	asset := flag.String("asset", "BTCUSDT", "Asset to backtest")
+	// Create a channel to listen for OS signals
+	sigChan := make(chan os.Signal, 1)
+	// Notify the channel when receiving an Interrupt (Ctrl+C) or Termination signal
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	// Run a goroutine to handle the signal
+	go func() {
+		sig := <-sigChan
+		fmt.Println("\nReceived signal:", sig)
+		cleanup()
+	}()
+
+	asset = flag.String("asset", "BTCUSDT", "Asset to backtest")
 	flag.Parse()
 	apiKey := os.Getenv("API_KEY")
 	apiSecret := os.Getenv("API_SECRET")
@@ -60,25 +76,30 @@ func liveRun(bi ingestors.BinanceIngestor, asset string) {
 
 	ss := helper.Duplicate(bd.Klines, 2)
 	ac, oc := scalp.ComputeWithOutcome(ss[0], true)
-	var outcome float64
+
 	for a := range ac {
 		kline := <-ss[1]
 		outcome = <-oc
 		log.Printf("Action: %v, Price: %.2f, Outcome: %.2f", extendedAnnotation(a), kline.Close, outcome)
 
 		// we should run the compute until midnight, store the outcome and retrain the weights
-		if time.Since(startDate) >= 24*time.Hour {
+		if time.Since(startDate) >= 23*time.Hour {
 			log.Printf("End of day, retraining weights")
 			// TODO: CLOSE ALL POSITIONS when live!!
 			break
 		}
 	}
 
-	log.Println("Day results:", outcome)
-	err = storeOutcome(asset, outcome)
+	cleanup()
+}
+
+func cleanup() {
+	log.Println("Trade results:", outcome)
+	err := storeOutcome(*asset, outcome)
 	if err != nil {
 		log.Fatalf("Error storing outcome: %v", err)
 	}
+	os.Exit(0)
 }
 
 func extendedAnnotation(a strategy.Action) string {
