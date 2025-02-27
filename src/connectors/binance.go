@@ -1,4 +1,4 @@
-package ingestors
+package connectors
 
 import (
 	"crypto/hmac"
@@ -21,15 +21,15 @@ const KLINE_INTERVAL = "1m"
 const LIVE = "https://fapi.binance.com"
 const TESTNET = "https://testnet.binancefuture.com"
 
-type BinanceIngestor struct {
-	Ingestor
+type BinanceConnector struct {
+	Connector
 	Url    string
 	Key    string
 	Secret string
 }
 
 // used to poll many symbols at once, might be useful in the future to use slices of PollData in internal functions
-func (i *BinanceIngestor) Poll(symbol string) (PollData, error) {
+func (i *BinanceConnector) Poll(symbol string) (PollData, error) {
 	var data []PollData
 	data = append(data, PollData{
 		Symbol:    symbol,
@@ -43,7 +43,7 @@ func (i *BinanceIngestor) Poll(symbol string) (PollData, error) {
 	return data[0], nil
 }
 
-func (i *BinanceIngestor) GetHistory(symbol string, from time.Time) chan *asset.Snapshot {
+func (i *BinanceConnector) GetHistory(symbol string, from time.Time) chan *asset.Snapshot {
 	res := make(chan *asset.Snapshot)
 	f := from
 
@@ -71,7 +71,7 @@ func (i *BinanceIngestor) GetHistory(symbol string, from time.Time) chan *asset.
 	return res
 }
 
-func (i *BinanceIngestor) GetSymbols(count int) ([]string, error) {
+func (i *BinanceConnector) GetSymbols(count int) ([]string, error) {
 	result := []string{}
 	resp, err := http.Get(i.Url + "/fapi/v1/exchangeInfo")
 	if err != nil {
@@ -102,7 +102,7 @@ func (i *BinanceIngestor) GetSymbols(count int) ([]string, error) {
 	return result, nil
 }
 
-func (i *BinanceIngestor) pollKlines(data []PollData) {
+func (i *BinanceConnector) pollKlines(data []PollData) {
 	for _, d := range data {
 		go func(d PollData) {
 			for {
@@ -127,7 +127,7 @@ func (i *BinanceIngestor) pollKlines(data []PollData) {
 		}(d)
 	}
 }
-func (i *BinanceIngestor) pollLastPrice(data []PollData) {
+func (i *BinanceConnector) pollLastPrice(data []PollData) {
 	for _, d := range data {
 		go func(d PollData) {
 			for {
@@ -143,7 +143,7 @@ func (i *BinanceIngestor) pollLastPrice(data []PollData) {
 	}
 }
 
-func (i *BinanceIngestor) getKlines(symbol string, from time.Time) ([]asset.Snapshot, error) {
+func (i *BinanceConnector) getKlines(symbol string, from time.Time) ([]asset.Snapshot, error) {
 	var result []asset.Snapshot
 	baseUrl := i.Url + "/fapi/v1/klines"
 	u, err := url.Parse(baseUrl)
@@ -227,7 +227,7 @@ func (i *BinanceIngestor) getKlines(symbol string, from time.Time) ([]asset.Snap
 	return result, nil
 }
 
-func (i *BinanceIngestor) getLastPrice(symbol string) (float64, error) {
+func (i *BinanceConnector) getLastPrice(symbol string) (float64, error) {
 	baseUrl := i.Url + "/fapi/v2/ticker/price"
 	u, err := url.Parse(baseUrl)
 	if err != nil {
@@ -264,7 +264,7 @@ func (i *BinanceIngestor) getLastPrice(symbol string) (float64, error) {
 	return p, nil
 }
 
-func (BinanceIngestor) generateHMAC(message, secretKey string) string {
+func (BinanceConnector) generateHMAC(message, secretKey string) string {
 	// Create a new HMAC using SHA256
 	h := hmac.New(sha256.New, []byte(secretKey))
 
@@ -275,7 +275,7 @@ func (BinanceIngestor) generateHMAC(message, secretKey string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func (i *BinanceIngestor) GetBalance() (float64, error) {
+func (i *BinanceConnector) GetBalance() (float64, error) {
 	baseUrl := i.Url + "/fapi/v3/balance"
 	u, err := url.Parse(baseUrl)
 	if err != nil {

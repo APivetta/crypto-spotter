@@ -7,8 +7,8 @@ import (
 	"log"
 	"time"
 
+	"pivetta.se/crypro-spotter/src/connectors"
 	"pivetta.se/crypro-spotter/src/genetics"
-	"pivetta.se/crypro-spotter/src/ingestors"
 	"pivetta.se/crypro-spotter/src/repositories"
 	"pivetta.se/crypro-spotter/src/utils"
 )
@@ -18,11 +18,11 @@ func main() {
 	count := flag.Int("count", 1, "Number of symbols to train")
 	flag.Parse()
 
-	bi := ingestors.BinanceIngestor{
-		Url: ingestors.LIVE,
+	bc := connectors.BinanceConnector{
+		Url: connectors.LIVE,
 	}
 
-	s, err := bi.GetSymbols(*count)
+	s, err := bc.GetSymbols(*count)
 	if err != nil {
 		log.Fatalf("Error fetching symbols: %v\n", err)
 	}

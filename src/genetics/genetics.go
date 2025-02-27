@@ -9,6 +9,7 @@ import (
 
 	"github.com/cinar/indicator/v2/asset"
 	"github.com/cinar/indicator/v2/helper"
+	"github.com/cinar/indicator/v2/strategy"
 	"pivetta.se/crypro-spotter/src/strategies"
 )
 
@@ -19,8 +20,11 @@ const (
 )
 
 type Score struct {
-	Value      float64
-	Individual strategies.StrategyWeights
+	Value       float64
+	PnL         float64
+	Successes   int
+	TotalTrades int
+	Individual  strategies.StrategyWeights
 }
 
 func GenerateRandomWeights() strategies.StrategyWeights {
@@ -121,6 +125,7 @@ func Mutate(weights strategies.StrategyWeights) strategies.StrategyWeights {
 
 func FitnessFunction(weights strategies.StrategyWeights, assets <-chan *asset.Snapshot) Score {
 	var outcome float64
+	var trades, successes int
 	scalp := strategies.Scalping{
 		Weights:       weights,
 		Stabilization: 60,
@@ -128,14 +133,37 @@ func FitnessFunction(weights strategies.StrategyWeights, assets <-chan *asset.Sn
 	}
 
 	ac, oc := scalp.ComputeWithOutcome(assets, false)
+	var startValue float64
 	for o := range oc {
-		<-ac
+		a := <-ac
+
+		if a == strategy.Buy || a == strategy.Sell {
+			startValue = o
+		}
+
+		if a == strategies.Close {
+			endValue := o - startValue
+			if endValue > 0 {
+				successes++
+			}
+			trades++
+		}
 		outcome = o
 	}
 
+	var value float64
+	if trades == 0 {
+		value = 0
+	} else {
+		value = outcome * (float64(successes) / float64(trades))
+	}
+
 	return Score{
-		Value:      outcome,
-		Individual: weights,
+		Value:       value,
+		PnL:         outcome,
+		Individual:  weights,
+		Successes:   successes,
+		TotalTrades: trades,
 	}
 }
 
@@ -180,7 +208,7 @@ func RunGenetic(repo asset.Repository, a string) (*Score, error) {
 		})
 
 		best = &fitnessScores[0]
-		log.Printf("Generation %d: Best Individual: %+v, Fitness: %.4f\n", gen, *best, fitnessScores[0].Value)
+		log.Printf("Generation %d: Fitness: %.2f, PnL: %.2f, Accuracy: %.2f, Trades: %d\n", gen, fitnessScores[0].Value, fitnessScores[0].PnL, float64(fitnessScores[0].Successes)/float64(fitnessScores[0].TotalTrades), fitnessScores[0].TotalTrades)
 
 		// Replace old population with new one
 		population = generateNewPop(fitnessScores)

@@ -13,8 +13,8 @@ import (
 
 	"github.com/cinar/indicator/v2/helper"
 	"github.com/cinar/indicator/v2/strategy"
+	"pivetta.se/crypro-spotter/src/connectors"
 	"pivetta.se/crypro-spotter/src/genetics"
-	"pivetta.se/crypro-spotter/src/ingestors"
 	"pivetta.se/crypro-spotter/src/repositories"
 	"pivetta.se/crypro-spotter/src/strategies"
 	"pivetta.se/crypro-spotter/src/utils"
@@ -25,7 +25,7 @@ var outcome float64
 var asset *string
 
 // this is dup code, find a place to put it and consolidate
-func fetchSnapshots(db *sql.DB, symbol string, bi ingestors.BinanceIngestor) {
+func fetchSnapshots(db *sql.DB, symbol string, bc connectors.BinanceConnector) {
 	recentSnapshot, err := repositories.GetLatestSnapshot(db, symbol)
 	if err != nil {
 		log.Fatalf("Error fetching most recent snapshot: %v\n", err)
@@ -42,7 +42,7 @@ func fetchSnapshots(db *sql.DB, symbol string, bi ingestors.BinanceIngestor) {
 		log.Printf("Fetching snapshots since %v\n", date)
 	}
 
-	ss := bi.GetHistory(symbol, date)
+	ss := bc.GetHistory(symbol, date)
 	repositories.InsertSnapshots(db, symbol, ss)
 }
 func geneticsRun(days int, asset string) {
@@ -106,30 +106,30 @@ func main() {
 		log.Fatalf("API_KEY and API_SECRET must be set")
 	}
 
-	bi := ingestors.BinanceIngestor{
-		Url:    ingestors.LIVE,
+	bc := connectors.BinanceConnector{
+		Url:    connectors.LIVE,
 		Key:    apiKey,
 		Secret: apiSecret,
 	}
 	db := utils.GetDb()
 
 	for {
-		fetchSnapshots(db, *asset, bi)
+		fetchSnapshots(db, *asset, bc)
 		geneticsRun(3, *asset)
-		liveRun(bi, *asset)
+		liveRun(bc, *asset)
 	}
-	// b, err := bi.GetBalance()
+	// b, err := bc.GetBalance()
 	// if err != nil {
 	// 	log.Fatalf("Error getting balance: %v", err)
 	// }
 	// log.Printf("Balance: %v", b)
 }
 
-func liveRun(bi ingestors.BinanceIngestor, asset string) {
+func liveRun(bc connectors.BinanceConnector, asset string) {
 	now := time.Now()
 	startDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 
-	bd, err := bi.Poll(asset)
+	bd, err := bc.Poll(asset)
 	if err != nil {
 		log.Fatalf("Error polling Binance: %v", err)
 	}

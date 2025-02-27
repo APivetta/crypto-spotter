@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"pivetta.se/crypro-spotter/src/ingestors"
+	"pivetta.se/crypro-spotter/src/connectors"
 	"pivetta.se/crypro-spotter/src/repositories"
 	"pivetta.se/crypro-spotter/src/utils"
 )
@@ -18,22 +18,22 @@ func main() {
 
 	db := utils.GetDb()
 
-	bi := ingestors.BinanceIngestor{
-		Url: ingestors.LIVE,
+	bc := connectors.BinanceConnector{
+		Url: connectors.LIVE,
 	}
 
-	s, err := bi.GetSymbols(*count)
+	s, err := bc.GetSymbols(*count)
 	if err != nil {
 		log.Fatalf("Error fetching symbols: %v\n", err)
 	}
 
 	for _, symbol := range s {
 		fmt.Printf("Fetching Symbol: %s\n", symbol)
-		fetchSnapshots(db, symbol, bi)
+		fetchSnapshots(db, symbol, bc)
 	}
 }
 
-func fetchSnapshots(db *sql.DB, symbol string, bi ingestors.BinanceIngestor) {
+func fetchSnapshots(db *sql.DB, symbol string, bc connectors.BinanceConnector) {
 	recentSnapshot, err := repositories.GetLatestSnapshot(db, symbol)
 	if err != nil {
 		log.Fatalf("Error fetching most recent snapshot: %v\n", err)
@@ -50,6 +50,6 @@ func fetchSnapshots(db *sql.DB, symbol string, bi ingestors.BinanceIngestor) {
 		log.Printf("Fetching snapshots since %v\n", date)
 	}
 
-	ss := bi.GetHistory(symbol, date)
+	ss := bc.GetHistory(symbol, date)
 	repositories.InsertSnapshots(db, symbol, ss)
 }

@@ -1,4 +1,4 @@
-package ingestors
+package connectors
 
 import (
 	"time"
@@ -13,7 +13,7 @@ type PollData struct {
 	LastFetched time.Time
 }
 
-type Ingestor interface {
+type Connector interface {
 	Poll() ([]PollData, error)
 	GetHistory(symbol string, from time.Time) chan *asset.Snapshot
 	GetSymbols(count int) ([]string, error)
