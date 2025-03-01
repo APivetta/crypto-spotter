@@ -8,7 +8,7 @@ import (
 
 	"github.com/cinar/indicator/v2/asset"
 	"github.com/cinar/indicator/v2/helper"
-	"pivetta.se/crypro-spotter/src/utils"
+	"pivetta.se/crypro-spotter/src/lib/db"
 )
 
 func GetLatestSnapshot(db *sql.DB, a string) (*asset.Snapshot, error) {
@@ -93,7 +93,7 @@ func Cleanup(db *sql.DB, a string) error {
 }
 
 func NewDBRepository(a string, limit int) (asset.Repository, error) {
-	db := utils.GetDb()
+	db := db.GetDb()
 	repo := asset.NewInMemoryRepository()
 
 	ss, err := GetSnapshots(db, a, limit)

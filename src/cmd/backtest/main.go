@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log"
 
+	"pivetta.se/crypro-spotter/src/lib/db"
 	"pivetta.se/crypro-spotter/src/repositories"
 	"pivetta.se/crypro-spotter/src/strategies"
-	"pivetta.se/crypro-spotter/src/utils"
 )
 
 func main() {
@@ -25,7 +25,7 @@ func backtestRun(days int, asset string) {
 		log.Fatalf("Error creating repository: %v", err)
 	}
 
-	w, err := utils.GetLatestWeights(asset)
+	w, err := db.GetLatestWeights(asset)
 	if err != nil {
 		log.Fatalf("Error getting weights: %v", err)
 	}

@@ -1,4 +1,4 @@
-package utils
+package db
 
 import (
 	"database/sql"
@@ -8,9 +8,11 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 
 	_ "github.com/lib/pq"
 
+	"pivetta.se/crypro-spotter/src/genetics"
 	"pivetta.se/crypro-spotter/src/strategies"
 )
 
@@ -84,4 +86,22 @@ func GetLatestWeights(a string) (*strategies.StrategyWeights, error) {
 	}
 
 	return weights, nil
+}
+
+func StoreWeights(a string, best *genetics.Score) error {
+	db := GetDb()
+
+	jsonData, err := json.Marshal(best.Individual)
+	if err != nil {
+		return err
+	}
+	genome := string(jsonData) // Store JSON as string in DB
+
+	query := `INSERT INTO genomes (asset, date, genome, fitness) VALUES ($1, $2, $3, $4)`
+	_, err = db.Exec(query, a, time.Now(), genome, best.Value)
+	if err != nil {
+		return fmt.Errorf("storeWeights: %w", err)
+	}
+
+	return nil
 }

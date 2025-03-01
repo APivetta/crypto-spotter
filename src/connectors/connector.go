@@ -17,4 +17,5 @@ type Connector interface {
 	Poll() ([]PollData, error)
 	GetHistory(symbol string, from time.Time) chan *asset.Snapshot
 	GetSymbols(count int) ([]string, error)
+	GetBalance() (float64, error)
 }

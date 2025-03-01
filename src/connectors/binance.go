@@ -327,3 +327,112 @@ func (i *BinanceConnector) GetBalance() (float64, error) {
 
 	return 0, nil
 }
+
+type Side string
+type PositionSide string
+
+const (
+	BUY   Side         = "BUY"
+	SELL  Side         = "SELL"
+	BOTH  PositionSide = "BOTH"
+	LONG  PositionSide = "LONG"
+	SHORT PositionSide = "SHORT"
+)
+
+func (i *BinanceConnector) TestOrder(symbol string, side Side, ps PositionSide) error {
+	baseUrl := i.Url + "/fapi/v1/order"
+	u, err := url.Parse(baseUrl)
+	if err != nil {
+		return err
+	}
+
+	q := u.Query()
+	q.Set("symbol", symbol)
+	q.Set("side", string(side))
+	q.Set("positionSide", "BOTH")
+	q.Set("type", "MARKET")
+	q.Set("quantity", "0.01")
+	q.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	u.RawQuery = q.Encode()
+	signature := i.generateHMAC(u.RawQuery, i.Secret)
+	u.RawQuery += "&signature=" + signature
+
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		fmt.Println("Error creating request:", err)
+		return err
+	}
+
+	req.Header.Set("X-MBX-APIKEY", i.Key)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error making request:", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(string(body))
+
+	var raw []interface{}
+	err = json.Unmarshal(body, &raw)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (i *BinanceConnector) CloseOrder(symbol string, side Side, ps PositionSide) error {
+	baseUrl := i.Url + "/fapi/v1/order"
+	u, err := url.Parse(baseUrl)
+	if err != nil {
+		return err
+	}
+
+	q := u.Query()
+	q.Set("symbol", symbol)
+	q.Set("side", string(side))
+	q.Set("positionSide", "BOTH")
+	q.Set("type", "MARKET")
+	q.Set("quantity", "0.01")
+	q.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	u.RawQuery = q.Encode()
+	signature := i.generateHMAC(u.RawQuery, i.Secret)
+	u.RawQuery += "&signature=" + signature
+
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		fmt.Println("Error creating request:", err)
+		return err
+	}
+
+	req.Header.Set("X-MBX-APIKEY", i.Key)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error making request:", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(string(body))
+
+	var raw []interface{}
+	err = json.Unmarshal(body, &raw)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
