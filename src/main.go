@@ -38,28 +38,34 @@ func main() {
 	flag.Parse()
 	apiKey := os.Getenv("API_KEY")
 	apiSecret := os.Getenv("API_SECRET")
+	mode := os.Getenv("MODE")
+	skip := os.Getenv("SKIP")
+	trade := os.Getenv("TRADE")
+
+	url := connectors.TESTNET
+	if mode == "live" {
+		log.Println("Running in live mode")
+		url = connectors.LIVE
+	}
 
 	if apiKey == "" || apiSecret == "" {
 		log.Fatalf("API_KEY and API_SECRET must be set")
 	}
 
 	bc := connectors.BinanceConnector{
-		Url:    connectors.LIVE,
+		Url:    url,
 		Key:    apiKey,
 		Secret: apiSecret,
 	}
 	db := db.GetDb()
 
 	for {
-		helpers.FetchSnapshots(db, *asset, bc)
-		helpers.GeneticsRun(3, *asset)
-		liveRun(bc, *asset)
+		if skip != "true" {
+			helpers.FetchSnapshots(db, *asset, bc)
+			helpers.GeneticsRun(3, *asset)
+		}
+		liveRun(bc, *asset, trade == "true")
 	}
-	// b, err := bc.GetBalance()
-	// if err != nil {
-	// 	log.Fatalf("Error getting balance: %v", err)
-	// }
-	// log.Printf("Balance: %v", b)
 }
 
 // func main() {
@@ -88,7 +94,7 @@ func main() {
 
 // }
 
-func liveRun(bc connectors.BinanceConnector, asset string) {
+func liveRun(bc connectors.BinanceConnector, asset string, trade bool) {
 	now := time.Now()
 	startDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 
@@ -111,6 +117,7 @@ func liveRun(bc connectors.BinanceConnector, asset string) {
 	ss := helper.Duplicate(bd.Klines, 2)
 	ac, oc := scalp.ComputeWithOutcome(ss[0], true)
 
+	var pos *strategies.Position
 	for a := range ac {
 		kline := <-ss[1]
 		outcome = <-oc
@@ -119,8 +126,73 @@ func liveRun(bc connectors.BinanceConnector, asset string) {
 		// we should run the compute until midnight, store the outcome and retrain the weights
 		if time.Since(startDate) >= 24*time.Hour {
 			log.Printf("End of day, retraining weights")
-			// TODO: CLOSE ALL POSITIONS when live!!
+			if pos != nil {
+				// generate opposite order to close position
+				var orderType connectors.Side
+				if pos.Type == strategies.LONG {
+					orderType = connectors.SELL
+				} else {
+					orderType = connectors.BUY
+				}
+
+				err := bc.PlaceOrder(asset, orderType, helpers.CalculateQuantity(250, pos.EntryPrice))
+				if err != nil {
+					// figure what to do here, serious here
+					log.Printf("Error placing order: %v", err)
+				} else {
+					pos = nil
+				}
+			}
+
 			break
+		}
+
+		if !trade {
+			continue
+		}
+
+		if a == strategy.Buy {
+			err := bc.PlaceOrder(asset, connectors.BUY, helpers.CalculateQuantity(250, kline.Close))
+			if err != nil {
+				// figure what to do here
+				log.Printf("Error placing order: %v", err)
+			} else {
+				log.Printf("Placed order: %v", asset)
+				pos = &strategies.Position{
+					Type:       strategies.LONG,
+					EntryPrice: kline.Close,
+					EntryTime:  time.Now(),
+				}
+			}
+		} else if a == strategy.Sell {
+			err := bc.PlaceOrder(asset, connectors.SELL, helpers.CalculateQuantity(250, kline.Close))
+			if err != nil {
+				// figure what to do here
+				log.Printf("Error placing order: %v", err)
+			} else {
+				log.Printf("Placed order: %v", asset)
+				pos = &strategies.Position{
+					Type:       strategies.SHORT,
+					EntryPrice: kline.Close,
+					EntryTime:  time.Now(),
+				}
+			}
+		} else if a == strategies.Close && pos != nil {
+			// generate opposite order to close position
+			var orderType connectors.Side
+			if pos.Type == strategies.LONG {
+				orderType = connectors.SELL
+			} else {
+				orderType = connectors.BUY
+			}
+
+			err := bc.PlaceOrder(asset, orderType, helpers.CalculateQuantity(250, pos.EntryPrice))
+			if err != nil {
+				// figure what to do here, serious here
+				log.Printf("Error placing order: %v", err)
+			} else {
+				pos = nil
+			}
 		}
 	}
 
